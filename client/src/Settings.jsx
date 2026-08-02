@@ -220,7 +220,7 @@ export default function Settings() {
           </div>
 
           <div className="ks-card">
-            <div className="ks-card__head"><Info size={15} strokeWidth={1.8} /><h2>About KaliSOS</h2></div>
+            <div className="ks-card__head"><Info size={15} strokeWidth={1.8} /><h2>About Parashu</h2></div>
             <div className="ks-card__body" style={{ fontSize: 13, color: "var(--muted)", display: "grid", gap: 6 }}>
               <div className="ks-list__row" style={{ padding: "6px 0" }}>
                 <span>Voice activated emergency response platform</span>

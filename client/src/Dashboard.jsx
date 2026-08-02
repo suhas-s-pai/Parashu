@@ -1,417 +1,445 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
+import { signOutUser } from "./lib/supabaseClient";
 import {
-  Siren,
+  AlertTriangle,
+  BellRing,
   CheckCircle2,
-  Timer,
-  Users,
-  Satellite,
-  Activity,
-  Phone,
-  Clock,
+  Clock3,
+  History,
+  LogOut,
+  Mail,
   MapPin,
-  Copy,
-  Check,
-  ExternalLink,
-  Volume2,
-  Navigation,
-  Building2,
-  Crosshair,
-  Mic,
-  Radio,
+  Phone,
+  Search,
+  Settings as SettingsIcon,
+  ShieldAlert,
+  Sparkles,
+  UserRound,
 } from "lucide-react";
-import CommandShell from "./CommandShell";
 
-const siren = new Audio("/siren.mp3");
-siren.loop = true;
-siren.preload = "auto";
+const API_BASE = import.meta.env.VITE_API_BASE || "https://kalisos-backend.onrender.com";
 
-/* ---------- presentation helpers (no API or state involvement) ---------- */
-
-// Priority is derived from how long the caller has been waiting. It is a
-// display heuristic, not a value the backend assigns.
-function priorityOf(createdAt) {
-  const minutes = (Date.now() - new Date(createdAt).getTime()) / 60000;
-  if (minutes < 3) return { level: "P1", cls: "", chip: "ks-chip--red", label: "Critical" };
-  if (minutes < 12) return { level: "P2", cls: "ks-alert--p2", chip: "ks-chip--amber", label: "Elevated" };
-  return { level: "P3", cls: "ks-alert--p3", chip: "ks-chip--blue", label: "Standing" };
+function normalizeAlert(alert) {
+  return {
+    ...alert,
+    user_name: alert.user_name || alert.name || "Unknown",
+    email: alert.email || "Not provided",
+    trigger_type: alert.trigger_type || "Manual SOS",
+    current_status: alert.status === "handled" ? "Resolved" : "Active",
+    accuracy: alert.accuracy || alert.device_accuracy || "Unknown",
+  };
 }
 
-function elapsedSince(createdAt) {
-  const seconds = Math.max(0, Math.floor((Date.now() - new Date(createdAt).getTime()) / 1000));
-  if (seconds < 60) return `${seconds}s`;
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
-  return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
+function formatTime(isoString) {
+  const date = new Date(isoString);
+  return date.toLocaleString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
 }
 
-// Great-circle distance, used only when the operator has pinned the control
-// room position. Returns null otherwise rather than inventing a number.
-function distanceKm(origin, lat, lon) {
-  if (!origin) return null;
-  const toRad = (d) => (d * Math.PI) / 180;
-  const R = 6371;
-  const dLat = toRad(lat - origin.lat);
-  const dLon = toRad(lon - origin.lon);
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(origin.lat)) * Math.cos(toRad(lat)) * Math.sin(dLon / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
+export default function Dashboard() {
+  const user = JSON.parse(localStorage.getItem("user") || "null");
+  const [activeSection, setActiveSection] = useState("active");
+  const [activeAlerts, setActiveAlerts] = useState([]);
+  const [history, setHistory] = useState([]);
+  const [expandedAlertId, setExpandedAlertId] = useState(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [realtimeEnabled, setRealtimeEnabled] = useState(true);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+  const [statusMessage, setStatusMessage] = useState("Listening for active emergencies");
+  const [addressMap, setAddressMap] = useState({});
+  const [addressLoadingMap, setAddressLoadingMap] = useState({});
 
-function osmEmbed(lat, lon, span = 0.012) {
-  const bbox = [lon - span, lat - span * 0.75, lon + span, lat + span * 0.75].join(",");
-  return `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${lat},${lon}`;
-}
-
-export default function Dashboard({ focus }) {
-
-  const [alerts, setAlerts] = useState([]);
-  const [lastAlertCount, setLastAlertCount] = useState(0);
-
- useEffect(() => {
-
-  // unlock audio
-  document.body.addEventListener("click", () => {
-    siren.play().then(()=>siren.pause()).catch(()=>{});
-  }, { once: true });
-
-  fetchAlerts();
-
-  const interval = setInterval(() => {
-    fetchAlerts();
-  }, 2000);
-
-  return () => clearInterval(interval);
-
-}, []);
-
-const fetchAlerts = async () => {
-
-const res = await axios.get("https://kalisos-backend.onrender.com/alerts");
-
-if(res.data.length > lastAlertCount){
-
-  siren.currentTime = 0;
-  siren.play().catch(()=>{});
-
-  setTimeout(()=>{
-    siren.pause();
-    siren.currentTime = 0;
-  },1000);
-
-}
-
-setLastAlertCount(res.data.length);
-setAlerts(res.data);
-
-};
-
-  const handleAlert = async (id) => {
-
-  await axios.delete(`https://kalisos-backend.onrender.com/alerts/${id}`);
-
-  fetchAlerts();
-
-};
-
-  /* ---------- view-only additions ---------- */
-
-  const [selectedId, setSelectedId] = useState(null);
-  const [copiedId, setCopiedId] = useState(null);
-  const [origin, setOrigin] = useState(null);
-
-  const feedOnly = focus === "feed";
-
-  const selected =
-    alerts.find((a) => a.id === selectedId) || alerts[0] || null;
-
-  const uniqueDevices = new Set(alerts.map((a) => a.phone)).size;
-
-  const copyCoordinates = async (alert) => {
-    const text = `${alert.latitude}, ${alert.longitude}`;
+  const loadAlerts = async () => {
     try {
-      await navigator.clipboard.writeText(text);
-      setCopiedId(alert.id);
-      setTimeout(() => setCopiedId(null), 1500);
+      const res = await axios.get(`${API_BASE}/alerts`);
+      const normalized = (res.data || []).map(normalizeAlert);
+      setActiveAlerts(normalized);
     } catch {
-      window.prompt("Copy coordinates", text);
+      setStatusMessage("Unable to reach the backend right now");
     }
   };
 
-  const playSiren = () => {
-    siren.currentTime = 0;
-    siren.play().catch(() => {});
-    setTimeout(() => {
-      siren.pause();
-      siren.currentTime = 0;
-    }, 2500);
+  useEffect(() => {
+    loadAlerts();
+  }, []);
+
+  useEffect(() => {
+    if (!realtimeEnabled) {
+      return undefined;
+    }
+
+    const source = new EventSource(`${API_BASE}/alerts/stream`);
+
+    source.addEventListener("snapshot", (event) => {
+      const payload = JSON.parse(event.data);
+      const normalized = (payload.alerts || []).map(normalizeAlert);
+      setActiveAlerts(normalized);
+      setStatusMessage("Realtime connected");
+    });
+
+    source.addEventListener("update", (event) => {
+      const payload = JSON.parse(event.data);
+      const normalized = (payload.alerts || []).map(normalizeAlert);
+      setActiveAlerts(normalized);
+      if (notificationsEnabled) {
+        setStatusMessage("New emergency received");
+      }
+    });
+
+    source.onerror = () => {
+      setStatusMessage("Realtime interrupted. Using the latest available data.");
+    };
+
+    return () => source.close();
+  }, [realtimeEnabled, notificationsEnabled]);
+
+  useEffect(() => {
+    if (!expandedAlertId) {
+      return;
+    }
+
+    const alert = activeAlerts.find((item) => item.id === expandedAlertId);
+    if (!alert || addressMap[expandedAlertId] || addressLoadingMap[expandedAlertId]) {
+      return;
+    }
+
+    const resolveAddress = async () => {
+      setAddressLoadingMap((prev) => ({ ...prev, [expandedAlertId]: true }));
+      try {
+        const response = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(alert.latitude)}&lon=${encodeURIComponent(alert.longitude)}`
+        );
+        const data = await response.json();
+        const address = data?.display_name || "Address unavailable";
+        setAddressMap((prev) => ({ ...prev, [expandedAlertId]: address }));
+      } catch {
+        setAddressMap((prev) => ({ ...prev, [expandedAlertId]: "Address unavailable" }));
+      } finally {
+        setAddressLoadingMap((prev) => ({ ...prev, [expandedAlertId]: false }));
+      }
+    };
+
+    resolveAddress();
+  }, [activeAlerts, addressLoadingMap, addressMap, expandedAlertId]);
+
+  const handleResolve = async (alert) => {
+    try {
+      await axios.delete(`${API_BASE}/alerts/${alert.id}`);
+      const resolvedAlert = normalizeAlert({ ...alert, status: "handled" });
+      setHistory((prev) => [resolvedAlert, ...prev]);
+      setActiveAlerts((prev) => prev.filter((item) => item.id !== alert.id));
+      setExpandedAlertId(null);
+      setActiveSection("history");
+      setStatusMessage("Emergency marked as resolved");
+    } catch {
+      setStatusMessage("Unable to resolve the alert right now");
+    }
   };
 
-  const pinControlRoom = () => {
-    navigator.geolocation.getCurrentPosition(
-      (pos) => setOrigin({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
-      () => setOrigin(null)
-    );
+  const filteredHistory = history.filter((item) => {
+    const term = searchTerm.trim().toLowerCase();
+    if (!term) return true;
+    const haystack = `${item.user_name || ""} ${item.phone || ""}`.toLowerCase();
+    return haystack.includes(term);
+  });
+
+  const logout = async () => {
+    await signOutUser();
+    window.location.reload();
   };
 
-  /* ---------- pieces ---------- */
+  const toggleExpanded = (alertId) => {
+    setExpandedAlertId((current) => (current === alertId ? null : alertId));
+  };
 
-  const statsRow = (
-    <section className="ks-stats">
+  const openLocation = (alert) => {
+    window.open(`https://maps.google.com/?q=${alert.latitude},${alert.longitude}`, "_blank", "noopener,noreferrer");
+  };
 
-      <article className="ks-stat ks-stat--red">
-        <div className="ks-stat__top"><Siren size={15} strokeWidth={1.8} /><span>Active Alerts</span></div>
-        <p className="ks-stat__value">{alerts.length}</p>
-        <p className="ks-stat__meta">Awaiting response</p>
-      </article>
+  const openOpenStreetMap = (alert) => {
+    window.open(`https://www.openstreetmap.org/?mlat=${alert.latitude}&mlon=${alert.longitude}#map=15/${alert.latitude}/${alert.longitude}`, "_blank", "noopener,noreferrer");
+  };
 
-      <article className="ks-stat ks-stat--muted">
-        <div className="ks-stat__top"><CheckCircle2 size={15} strokeWidth={1.8} /><span>Handled Today</span></div>
-        <p className="ks-stat__value ks-pending">—</p>
-        <p className="ks-stat__meta">Needs a resolved-alerts endpoint</p>
-      </article>
-
-      <article className="ks-stat ks-stat--muted">
-        <div className="ks-stat__top"><Timer size={15} strokeWidth={1.8} /><span>Avg Response Time</span></div>
-        <p className="ks-stat__value ks-pending">—</p>
-        <p className="ks-stat__meta">Needs handled_at timestamps</p>
-      </article>
-
-      <article className="ks-stat ks-stat--muted">
-        <div className="ks-stat__top"><Users size={15} strokeWidth={1.8} /><span>Officers Online</span></div>
-        <p className="ks-stat__value ks-pending">—</p>
-        <p className="ks-stat__meta">Needs officer presence service</p>
-      </article>
-
-      <article className="ks-stat ks-stat--green">
-        <div className="ks-stat__top"><Satellite size={15} strokeWidth={1.8} /><span>Live GPS Devices</span></div>
-        <p className="ks-stat__value">{uniqueDevices}</p>
-        <p className="ks-stat__meta">Distinct handsets transmitting</p>
-      </article>
-
-      <article className="ks-stat">
-        <div className="ks-stat__top"><Activity size={15} strokeWidth={1.8} /><span>Alert Feed</span></div>
-        <p className="ks-stat__value ks-stat__value--sm">Polling · 2s</p>
-        <p className="ks-stat__meta">Live connection status in top bar</p>
-      </article>
-
-    </section>
-  );
-
-  const feed = (
-    <section>
-
-      <div className="ks-sectionhead">
-        <h2>Live Emergency Feed</h2>
-        <span className="ks-chip ks-chip--ghost">{alerts.length} open</span>
-        <div className="ks-sectionhead__spacer" />
-        <button
-          className="ks-btn ks-btn--ghost ks-btn--sm"
-          onClick={pinControlRoom}
-          title="Use this browser's location as the control room origin to compute distances"
-        >
-          <Crosshair size={14} strokeWidth={1.8} />
-          {origin ? "Origin pinned" : "Pin control room"}
-        </button>
-      </div>
-
-      <div className="ks-feed">
-
-        {alerts.length === 0 && (
-          <div className="ks-card">
-            <div className="ks-empty">
-              <CheckCircle2 size={22} strokeWidth={1.6} />
-              <h3>No active emergencies</h3>
-              <p>The channel is monitored continuously. Incoming alerts appear here within two seconds.</p>
-            </div>
+  const renderActiveView = () => (
+    <div className="pa-content-grid">
+      <section className="pa-live-card">
+        <div className="pa-panel-head">
+          <div>
+            <p className="pa-kicker">Active SOS</p>
+            <h2>Live incidents</h2>
           </div>
-        )}
-
-        {alerts.map((alert) => {
-          const priority = priorityOf(alert.created_at);
-          const distance = distanceKm(origin, Number(alert.latitude), Number(alert.longitude));
-
-          return (
-            <article
-              className={`ks-alert ${priority.cls}${selected && selected.id === alert.id ? " is-selected" : ""}`}
-              key={alert.id}
-              onClick={() => setSelectedId(alert.id)}
-            >
-
-              <header className="ks-alert__head">
-
-                <span className="ks-avatar">
-                  {String(alert.user_name || "?").trim().charAt(0).toUpperCase()}
-                </span>
-
-                <div className="ks-alert__id">
-                  <h3>{alert.user_name}</h3>
-                  <div className="ks-alert__sub">
-                    <a href={`tel:${alert.phone}`} onClick={(e) => e.stopPropagation()}>
-                      <Phone size={12} strokeWidth={1.9} />
-                      {alert.phone}
-                    </a>
-                    <span><Clock size={12} strokeWidth={1.9} style={{ verticalAlign: -2, marginRight: 4 }} />
-                      {new Date(alert.created_at).toLocaleString("en-IN", {
-                        day: "2-digit", month: "short", hour: "numeric", minute: "2-digit", hour12: true,
-                      })}
-                    </span>
-                  </div>
-                </div>
-
-                <span className={`ks-chip ${priority.chip}`}>{priority.level} · {priority.label}</span>
-
-              </header>
-
-              <div className="ks-alert__badges">
-                <span className="ks-chip ks-chip--red">
-                  <span className="ks-dot ks-dot--red" /> SOS Active
-                </span>
-                <span className="ks-chip ks-chip--ghost" title="The API does not record whether the alert came from the SOS button or a voice phrase">
-                  <Mic size={11} strokeWidth={2} /> Trigger not recorded
-                </span>
-                <span className="ks-chip ks-chip--ghost" title="Handset battery is not transmitted by the client">
-                  Battery n/a
-                </span>
-                <span className="ks-chip ks-chip--ghost">
-                  <Radio size={11} strokeWidth={2} /> {elapsedSince(alert.created_at)} elapsed
-                </span>
-              </div>
-
-              <div className="ks-grid2">
-                <div className="ks-kv">
-                  <div className="ks-kv__k"><MapPin size={10} strokeWidth={2.2} /> Latitude</div>
-                  <div className="ks-kv__v">{alert.latitude}</div>
-                </div>
-                <div className="ks-kv">
-                  <div className="ks-kv__k"><MapPin size={10} strokeWidth={2.2} /> Longitude</div>
-                  <div className="ks-kv__v">{alert.longitude}</div>
-                </div>
-                <div className="ks-kv">
-                  <div className="ks-kv__k"><Navigation size={10} strokeWidth={2.2} /> Distance</div>
-                  <div className={`ks-kv__v${distance === null ? " ks-pending" : ""}`}>
-                    {distance === null ? "pin origin" : `${distance.toFixed(2)} km`}
-                  </div>
-                </div>
-              </div>
-
-              <div className="ks-actions" onClick={(e) => e.stopPropagation()}>
-
-                <a
-                  className="ks-btn ks-btn--sm"
-                  href={`https://maps.google.com/?q=${alert.latitude},${alert.longitude}`}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  <ExternalLink size={14} strokeWidth={1.9} /> Open Maps
-                </a>
-
-                <button className="ks-btn ks-btn--ghost ks-btn--sm" onClick={() => copyCoordinates(alert)}>
-                  {copiedId === alert.id
-                    ? <><Check size={14} strokeWidth={2.2} /> Copied</>
-                    : <><Copy size={14} strokeWidth={1.9} /> Coordinates</>}
-                </button>
-
-                <a className="ks-btn ks-btn--ghost ks-btn--sm" href={`tel:${alert.phone}`}>
-                  <Phone size={14} strokeWidth={1.9} /> Call
-                </a>
-
-                <button className="ks-btn ks-btn--ghost ks-btn--sm" onClick={playSiren}>
-                  <Volume2 size={14} strokeWidth={1.9} /> Siren
-                </button>
-
-                <button
-                  className="ks-btn ks-btn--success ks-btn--sm"
-                  onClick={() => handleAlert(alert.id)}
-                >
-                  <Check size={14} strokeWidth={2.2} /> Handle Alert
-                </button>
-
-              </div>
-
-            </article>
-          );
-        })}
-
-      </div>
-    </section>
-  );
-
-  const mapPanel = (
-    <aside className="ks-mappanel">
-      <div className="ks-card">
-
-        <div className="ks-card__head">
-          <MapPin size={15} strokeWidth={1.8} />
-          <h2>Live Position</h2>
-          {selected && <span className="ks-chip ks-chip--red"><span className="ks-dot ks-dot--red" /> Tracking</span>}
+          <span className="pa-pill">{activeAlerts.length} active</span>
         </div>
 
-        {selected ? (
-          <>
-            <div className="ks-mapwrap">
-              <iframe
-                className="ks-map"
-                title="Live emergency position"
-                src={osmEmbed(Number(selected.latitude), Number(selected.longitude))}
-                loading="lazy"
-              />
+        <div className="pa-list">
+          {activeAlerts.length === 0 && (
+            <div className="pa-empty-card">
+              <CheckCircle2 size={20} />
+              <h3>No active emergencies</h3>
+              <p>Incoming SOS alerts will appear instantly here.</p>
             </div>
+          )}
 
-            <div className="ks-card__body" style={{ display: "grid", gap: 10 }}>
+          {activeAlerts.map((alert) => {
+            const isExpanded = expandedAlertId === alert.id;
+            const address = addressMap[alert.id];
+            const isLoadingAddress = addressLoadingMap[alert.id];
 
-              <div className="ks-list">
-                <div className="ks-list__row"><span style={{ color: "var(--muted)" }}>Caller</span><b>{selected.user_name}</b></div>
-                <div className="ks-list__row"><span style={{ color: "var(--muted)" }}>Latitude</span><b>{selected.latitude}</b></div>
-                <div className="ks-list__row"><span style={{ color: "var(--muted)" }}>Longitude</span><b>{selected.longitude}</b></div>
-                <div className="ks-list__row">
-                  <span style={{ color: "var(--muted)" }}>Nearest station</span>
-                  <b className="ks-pending">not connected</b>
-                </div>
-              </div>
+            return (
+              <article key={alert.id} className={`pa-alert-card${isExpanded ? " is-expanded" : ""}`}>
+                <button className="pa-alert-card__trigger" onClick={() => toggleExpanded(alert.id)}>
+                  <div className="pa-alert-card__top">
+                    <div className="pa-avatar">{(alert.user_name || "U").charAt(0).toUpperCase()}</div>
+                    <div className="pa-alert-card__meta">
+                      <strong>{alert.user_name}</strong>
+                      <span>{alert.phone}</span>
+                    </div>
+                    <span className="pa-pill pa-pill--danger">{alert.trigger_type}</span>
+                  </div>
 
-              <div className="ks-actions">
-                <a
-                  className="ks-btn ks-btn--sm"
-                  href={`https://www.google.com/maps/dir/?api=1&destination=${selected.latitude},${selected.longitude}`}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  <Navigation size={14} strokeWidth={1.9} /> Navigate
-                </a>
-                <a
-                  className="ks-btn ks-btn--ghost ks-btn--sm"
-                  href={`https://www.google.com/maps/search/police+station/@${selected.latitude},${selected.longitude},14z`}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  <Building2 size={14} strokeWidth={1.9} /> Find station
-                </a>
-              </div>
+                  <div className="pa-status-row">
+                    <span className="pa-pill">{formatTime(alert.created_at)}</span>
+                    <span className="pa-pill">{alert.current_status}</span>
+                    <span className="pa-live-dot">
+                      <span /> Live
+                    </span>
+                  </div>
+                </button>
 
-            </div>
-          </>
-        ) : (
-          <div className="ks-empty">
-            <MapPin size={22} strokeWidth={1.6} />
-            <h3>No position to track</h3>
-            <p>Select an alert to plot the caller's live coordinates.</p>
+                {isExpanded && (
+                  <div className="pa-alert-expansion">
+                    <div className="pa-expansion-grid">
+                      <div className="pa-expansion-field">
+                        <span>Full name</span>
+                        <strong>{alert.user_name}</strong>
+                      </div>
+                      <div className="pa-expansion-field">
+                        <span>Phone number</span>
+                        <strong>{alert.phone}</strong>
+                      </div>
+                      <div className="pa-expansion-field">
+                        <span>Email</span>
+                        <strong>{alert.email}</strong>
+                      </div>
+                      <div className="pa-expansion-field">
+                        <span>Latitude</span>
+                        <strong>{alert.latitude}</strong>
+                      </div>
+                      <div className="pa-expansion-field">
+                        <span>Longitude</span>
+                        <strong>{alert.longitude}</strong>
+                      </div>
+                      <div className="pa-expansion-field">
+                        <span>Device accuracy</span>
+                        <strong>{alert.accuracy}</strong>
+                      </div>
+                      <div className="pa-expansion-field pa-address">
+                        <span>Current address</span>
+                        <strong>{isLoadingAddress ? "Resolving address…" : address || "Address unavailable"}</strong>
+                      </div>
+                      <div className="pa-expansion-field">
+                        <span>Trigger type</span>
+                        <strong>{alert.trigger_type}</strong>
+                      </div>
+                      <div className="pa-expansion-field">
+                        <span>Time triggered</span>
+                        <strong>{formatTime(alert.created_at)}</strong>
+                      </div>
+                      <div className="pa-expansion-field">
+                        <span>Status</span>
+                        <strong>{alert.current_status}</strong>
+                      </div>
+                    </div>
+
+                    <div className="pa-actions">
+                      <button className="pa-btn" onClick={(event) => {
+                        event.stopPropagation();
+                        openLocation(alert);
+                      }}>
+                        <MapPin size={14} /> Track Live
+                      </button>
+                      <a className="pa-btn" href={`https://maps.google.com/?q=${alert.latitude},${alert.longitude}`} target="_blank" rel="noreferrer">
+                        <MapPin size={14} /> Open in Google Maps
+                      </a>
+                      <a className="pa-btn pa-btn--ghost" href={`https://www.openstreetmap.org/?mlat=${alert.latitude}&mlon=${alert.longitude}#map=15/${alert.latitude}/${alert.longitude}`} target="_blank" rel="noreferrer">
+                        <MapPin size={14} /> Open in OpenStreetMap
+                      </a>
+                      <button className="pa-btn pa-btn--success" onClick={(event) => {
+                        event.stopPropagation();
+                        handleResolve(alert);
+                      }}>
+                        <CheckCircle2 size={14} /> Mark as Resolved
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </article>
+            );
+          })}
+        </div>
+      </section>
+    </div>
+  );
+
+  const renderHistoryView = () => (
+    <section className="pa-history-panel">
+      <div className="pa-panel-head">
+        <div>
+          <p className="pa-kicker">History</p>
+          <h2>Resolved incidents</h2>
+        </div>
+        <label className="pa-search">
+          <Search size={14} />
+          <input value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="Search by name or phone" />
+        </label>
+      </div>
+
+      <div className="pa-history-list">
+        {filteredHistory.length === 0 && (
+          <div className="pa-empty-card">
+            <History size={20} />
+            <h3>No resolved cases yet</h3>
+            <p>Resolved emergencies will move here automatically.</p>
           </div>
         )}
 
+        {filteredHistory.map((item) => (
+          <article key={item.id} className="pa-history-card">
+            <div>
+              <strong>{item.user_name}</strong>
+              <p>{item.phone}</p>
+            </div>
+            <div>
+              <span>{formatTime(item.created_at)}</span>
+              <small>{item.trigger_type}</small>
+            </div>
+            <span className="pa-pill pa-pill--success">Resolved</span>
+          </article>
+        ))}
       </div>
-    </aside>
+    </section>
+  );
+
+  const renderSettingsView = () => (
+    <section className="pa-settings-panel">
+      <div className="pa-panel-head">
+        <div>
+          <p className="pa-kicker">Settings</p>
+          <h2>Console preferences</h2>
+        </div>
+      </div>
+
+      <div className="pa-settings-card">
+        <div className="pa-setting-row">
+          <div>
+            <strong>Theme</strong>
+            <p>Dark mode is currently active.</p>
+          </div>
+          <span className="pa-pill">Dark</span>
+        </div>
+
+        <div className="pa-setting-row">
+          <div>
+            <strong>Notification sound</strong>
+            <p>Play a short tone for new alerts.</p>
+          </div>
+          <button className={`pa-toggle${notificationsEnabled ? " is-on" : ""}`} onClick={() => setNotificationsEnabled((value) => !value)}>
+            <span />
+          </button>
+        </div>
+
+        <div className="pa-setting-row">
+          <div>
+            <strong>Realtime toggle</strong>
+            <p>Connect to the live stream automatically.</p>
+          </div>
+          <button className={`pa-toggle${realtimeEnabled ? " is-on" : ""}`} onClick={() => setRealtimeEnabled((value) => !value)}>
+            <span />
+          </button>
+        </div>
+
+        <div className="pa-setting-row pa-setting-row--last">
+          <div>
+            <strong>Logout</strong>
+            <p>Exit the control room.</p>
+          </div>
+          <button className="pa-btn pa-btn--ghost" onClick={logout}>
+            <LogOut size={14} /> Logout
+          </button>
+        </div>
+      </div>
+    </section>
   );
 
   return (
-    <CommandShell
-      title={feedOnly ? "Live Alerts" : "Emergency Operations"}
-      alertCount={alerts.length}
-      syncLabel="Live · 2s"
-      syncLive
-    >
-      {!feedOnly && statsRow}
-      {feedOnly ? feed : <div className="ks-split">{feed}{mapPanel}</div>}
-    </CommandShell>
+    <div className="pa-shell">
+      <aside className="pa-sidebar">
+        <div className="pa-brand">
+          <div className="pa-brand__mark">
+            <ShieldAlert size={18} />
+          </div>
+          <div>
+            <strong>Parashu</strong>
+            <span>Admin Console</span>
+          </div>
+        </div>
+
+        <nav className="pa-nav">
+          {[
+            { key: "active", label: "Active SOS", icon: AlertTriangle },
+            { key: "history", label: "History", icon: History },
+            { key: "settings", label: "Settings", icon: SettingsIcon },
+          ].map((item) => {
+            const Icon = item.icon;
+            return (
+              <button
+                key={item.key}
+                className={`pa-nav-item${activeSection === item.key ? " is-active" : ""}`}
+                onClick={() => setActiveSection(item.key)}
+              >
+                <Icon size={16} />
+                <span>{item.label}</span>
+              </button>
+            );
+          })}
+        </nav>
+
+        <div className="pa-sidebar-footer">
+          <div className="pa-user-pill">
+            <div className="pa-avatar pa-avatar--sm"><UserRound size={14} /></div>
+            <div>
+              <strong>{user?.name || "Admin"}</strong>
+              <span>{user?.phone || "Operator"}</span>
+            </div>
+          </div>
+          <button className="pa-btn pa-btn--ghost pa-btn--full" onClick={logout}>
+            <LogOut size={14} /> Logout
+          </button>
+        </div>
+      </aside>
+
+      <main className="pa-main">
+        <header className="pa-topbar">
+          <div>
+            <p className="pa-kicker">Parashu command center</p>
+            <h1>{activeSection === "active" ? "Active SOS" : activeSection === "history" ? "History" : "Settings"}</h1>
+          </div>
+          <div className="pa-topbar__meta">
+            <span className="pa-pill pa-pill--neutral"><BellRing size={14} /> {statusMessage}</span>
+            <span className="pa-pill"><Sparkles size={14} /> Minimal mode</span>
+          </div>
+        </header>
+
+        {activeSection === "active" && renderActiveView()}
+        {activeSection === "history" && renderHistoryView()}
+        {activeSection === "settings" && renderSettingsView()}
+      </main>
+    </div>
   );
 }

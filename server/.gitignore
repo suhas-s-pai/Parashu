@@ -6,3 +6,7 @@ node_modules
 .DS_Store
 dist
 build
+
+client/.env
+.env
+node_modules/

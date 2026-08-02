@@ -10,8 +10,8 @@ import {
   CheckCircle2,
   XCircle,
   HelpCircle,
-  Clock3,
 } from "lucide-react";
+import { getRedirectUrl, supabase } from "./lib/supabaseClient";
 
 // Read once: these reflect what the browser actually supports, not a
 // decorative claim. Home relies on both APIs, so surfacing their state here
@@ -50,19 +50,36 @@ export default function Login({ setUser }) {
 
 const [name,setName] = useState("");
 const [phone,setPhone] = useState("")
+const [error,setError] = useState("");
+const [isGoogleLoading,setIsGoogleLoading] = useState(false);
 
 // Read once on mount via lazy initializer — a plain synchronous read, so no
 // effect is needed to produce it.
 const [checks] = useState(readDeviceChecks);
 
-// Google sign-in has no backend behind it yet (this app's "login" is a
-// local name/phone capture, not real auth). Clicking says so instead of
-// pretending to authenticate.
-const [showGoogleNotice, setShowGoogleNotice] = useState(false);
+const handleGoogleClick = async () => {
+  setError("");
+  setIsGoogleLoading(true);
 
-const handleGoogleClick = () => {
-  setShowGoogleNotice(true);
-  setTimeout(() => setShowGoogleNotice(false), 4000);
+  try {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: getRedirectUrl(),
+        queryParams: {
+          access_type: "offline",
+          prompt: "consent",
+        },
+      },
+    });
+
+    if (error) {
+      throw error;
+    }
+  } catch (err) {
+    setError(err?.message || "Google sign-in could not be started.");
+    setIsGoogleLoading(false);
+  }
 };
 
 const handleLogin = () => {
@@ -99,7 +116,7 @@ return(
       <span className="ks-auth__mark">
         <ShieldAlert size={19} strokeWidth={2.1} />
       </span>
-      <span className="ks-auth__wordmark">Kali<span>SOS</span></span>
+      <span className="ks-auth__wordmark">Para<span>shu</span></span>
 
       <span className="ks-auth__live">
         <span className="ks-dot ks-dot--green" />
@@ -143,15 +160,15 @@ return(
       <h2 className="ks-auth__title">Welcome back</h2>
       <p className="ks-auth__sub">Enter your details to open the emergency console.</p>
 
-      <button type="button" className="ks-google" onClick={handleGoogleClick}>
+      <button type="button" className="ks-google" onClick={handleGoogleClick} disabled={isGoogleLoading}>
         <GoogleMark />
-        Continue with Google
+        {isGoogleLoading ? "Redirecting to Google…" : "Continue with Google"}
       </button>
 
-      {showGoogleNotice && (
+      {error && (
         <div className="ks-google__notice">
-          <Clock3 size={14} strokeWidth={1.9} />
-          Google sign-in isn't connected yet — continue below with your name and phone.
+          <HelpCircle size={14} strokeWidth={1.9} />
+          {error}
         </div>
       )}
 
@@ -208,7 +225,7 @@ return(
 
     </div>
 
-    <p className="ks-auth__foot">SPRINGX · KALISOS EMERGENCY PLATFORM</p>
+    <p className="ks-auth__foot">SPRINGX · PARASHU EMERGENCY PLATFORM</p>
 
   </section>
 

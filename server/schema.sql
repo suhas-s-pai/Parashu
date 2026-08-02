@@ -1,4 +1,4 @@
--- KaliSOS — Supabase (PostgreSQL) schema
+-- Parashu — Supabase (PostgreSQL) schema
 -- Run this once in the Supabase dashboard: SQL Editor → New query → Run.
 --
 -- ALREADY RAN THE EARLIER VERSION OF THIS FILE?

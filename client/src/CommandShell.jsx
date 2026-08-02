@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
 import axios from "axios";
+import { signOutUser } from "./lib/supabaseClient";
 import {
   ShieldAlert,
   LayoutDashboard,
@@ -70,8 +71,8 @@ export default function CommandShell({
     };
   }, []);
 
-  const logout = () => {
-    localStorage.removeItem("user");
+  const logout = async () => {
+    await signOutUser();
     window.location.reload();
   };
 
@@ -91,7 +92,7 @@ export default function CommandShell({
           <span className="ks-logo__mark">
             <ShieldAlert size={16} strokeWidth={2.1} />
           </span>
-          <span className="ks-logo__text">Kali<span>SOS</span></span>
+          <span className="ks-logo__text">Para<span>shu</span></span>
         </a>
 
         <span className="ks-navgroup">Operations</span>

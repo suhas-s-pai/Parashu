@@ -12,6 +12,7 @@ const PORT = process.env.PORT || 5000;
 // the API has always returned `user_name`, so PostgREST aliases it back.
 const ALERT_COLUMNS =
   "id, user_name:name, phone, latitude, longitude, status, created_at, updated_at";
+const ALERT_COLUMNS_WITH_META = `${ALERT_COLUMNS}, email, trigger_type`;
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -31,12 +32,12 @@ app.use(cors(allowedOrigins.length ? { origin: allowedOrigins } : {}));
 // Payloads are four short fields; anything larger is abuse, not a caller.
 app.use(express.json({ limit: "10kb" }));
 
+const sseClients = new Set();
+
 /* ------------------------------------------------------------------ *
  * Helpers
  * ------------------------------------------------------------------ */
 
-// Failures use { success, message, error }. Successful responses are left
-// exactly as the frontend already expects them.
 function fail(res, statusCode, message, errorCode) {
   return res.status(statusCode).json({
     success: false,
@@ -45,9 +46,6 @@ function fail(res, statusCode, message, errorCode) {
   });
 }
 
-// Logs the real cause server side and returns a stable code to the caller.
-// Postgres error text can name columns and constraints, which is not
-// something an unauthenticated endpoint should hand out.
 function failFromDatabase(res, context, error, message) {
   console.error(`[${context}]`, error);
   return fail(res, 500, message, "DATABASE_ERROR");
@@ -81,9 +79,6 @@ function readCoordinate(value, label, limit) {
   return { value: number };
 }
 
-// Deliberately permissive on name and phone: the login screen accepts any
-// text, so a stricter rule here would reject existing users and drop a real
-// emergency. Coordinates are machine generated and are checked properly.
 function readSosPayload(body) {
   const name = readText(body.user_name, "user_name", MAX_NAME_LENGTH);
   if (name.error) return { error: name.error };
@@ -97,26 +92,139 @@ function readSosPayload(body) {
   const longitude = readCoordinate(body.longitude, "longitude", 180);
   if (longitude.error) return { error: longitude.error };
 
+  const email = typeof body.email === "string" ? body.email.trim() : "";
+  const triggerType = typeof body.trigger_type === "string" ? body.trigger_type.trim() : "Manual SOS";
+
   return {
     value: {
       name: name.value,
       phone: phone.value,
       latitude: latitude.value,
       longitude: longitude.value,
+      email,
+      trigger_type: triggerType,
     },
   };
+}
+
+async function getActiveAlerts() {
+  const attempts = [
+    { columns: ALERT_COLUMNS_WITH_META, fallback: false },
+    { columns: ALERT_COLUMNS, fallback: true },
+  ];
+
+  for (const attempt of attempts) {
+    const { data, error } = await supabase
+      .from("sos_alerts")
+      .select(attempt.columns)
+      .eq("status", "active")
+      .order("created_at", { ascending: false });
+
+    if (!error) {
+      return (data || []).map((row) => ({
+        ...row,
+        user_name: row.user_name || row.name || "Unknown",
+        email: row.email || "",
+        trigger_type: row.trigger_type || "Manual SOS",
+      }));
+    }
+
+    const message = error.message || "";
+    if (!attempt.fallback && /column .* does not exist/i.test(message)) {
+      continue;
+    }
+
+    throw error;
+  }
+
+  return [];
+}
+
+async function insertAlert(payload) {
+  const basePayload = {
+    name: payload.name,
+    phone: payload.phone,
+    latitude: payload.latitude,
+    longitude: payload.longitude,
+  };
+
+  const optionalPayload = {};
+  if (payload.email) {
+    optionalPayload.email = payload.email;
+  }
+  if (payload.trigger_type) {
+    optionalPayload.trigger_type = payload.trigger_type;
+  }
+
+  const { error } = await supabase.from("sos_alerts").insert({ ...basePayload, ...optionalPayload });
+
+  if (error && /column .* does not exist/i.test(error.message || "")) {
+    return supabase.from("sos_alerts").insert(basePayload);
+  }
+
+  return { error };
+}
+
+function broadcastUpdate(alerts) {
+  const payload = JSON.stringify({ alerts });
+  for (const client of sseClients) {
+    client.write(`event: update\ndata: ${payload}\n\n`);
+  }
+}
+
+async function setupRealtime() {
+  const channel = supabase.channel("parashu-alerts");
+
+  channel.on(
+    "postgres_changes",
+    { event: "*", schema: "public", table: "sos_alerts" },
+    async () => {
+      try {
+        const alerts = await getActiveAlerts();
+        broadcastUpdate(alerts);
+      } catch (error) {
+        console.error("[realtime] failed to broadcast", error);
+      }
+    }
+  );
+
+  channel.subscribe((status) => {
+    console.log(`[realtime] ${status}`);
+  });
 }
 
 /* ------------------------------------------------------------------ *
  * Routes
  * ------------------------------------------------------------------ */
 
-// test route
 app.get("/", (req, res) => {
-  res.send("KaliSOS backend running");
+  res.send("Parashu backend running");
 });
 
-// SOS API
+app.get("/alerts/stream", async (req, res) => {
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
+  res.setHeader("Connection", "keep-alive");
+  res.flushHeaders?.();
+
+  const client = res;
+  sseClients.add(client);
+
+  res.write(`event: connected\ndata: ${JSON.stringify({ status: "connected" })}\n\n`);
+
+  try {
+    const alerts = await getActiveAlerts();
+    res.write(`event: snapshot\ndata: ${JSON.stringify({ alerts })}\n\n`);
+  } catch (error) {
+    console.error("[alerts/stream] initial snapshot failed", error);
+    res.write(`event: error\ndata: ${JSON.stringify({ message: "Unable to load alerts" })}\n\n`);
+  }
+
+  req.on("close", () => {
+    sseClients.delete(client);
+  });
+});
+
 app.post("/sos", async (req, res) => {
   const payload = readSosPayload(req.body || {});
 
@@ -124,13 +232,9 @@ app.post("/sos", async (req, res) => {
     return fail(res, 400, payload.error, "VALIDATION_ERROR");
   }
 
-  const { name, phone, latitude, longitude } = payload.value;
+  const { name, phone, latitude, longitude, email, trigger_type } = payload.value;
 
   try {
-    // Tracking sends a ping every 5 seconds, so the update path runs far more
-    // often than the insert. Attempting it first makes the common case a
-    // single round trip. created_at is left alone; the trigger moves
-    // updated_at. A miss returns count 0 and falls through to the insert.
     const { count, error: updateError } = await supabase
       .from("sos_alerts")
       .update({ latitude, longitude }, { count: "exact" })
@@ -142,51 +246,40 @@ app.post("/sos", async (req, res) => {
     }
 
     if (count > 0) {
+      const alerts = await getActiveAlerts();
+      broadcastUpdate(alerts);
       return res.json({ message: "Location updated" });
     }
 
-    const { error: insertError } = await supabase
-      .from("sos_alerts")
-      .insert({ name, phone, latitude, longitude });
+    const { error: insertError } = await insertAlert({ name, phone, latitude, longitude, email, trigger_type });
 
     if (insertError) {
-      // 23505: the partial unique index rejected a second active alert for
-      // this caller, meaning a concurrent request created one microseconds
-      // ago. That request carried effectively the same position, so this is
-      // a location update, not a failure.
       if (insertError.code === "23505") {
+        const alerts = await getActiveAlerts();
+        broadcastUpdate(alerts);
         return res.json({ message: "Location updated" });
       }
 
       return failFromDatabase(res, "POST /sos insert", insertError, "Insert error");
     }
 
+    const alerts = await getActiveAlerts();
+    broadcastUpdate(alerts);
     return res.json({ message: "SOS alert created" });
   } catch (err) {
     return failFromDatabase(res, "POST /sos", err, "Database error");
   }
 });
 
-// NEW API FOR DASHBOARD
 app.get("/alerts", async (req, res) => {
   try {
-    const { data, error } = await supabase
-      .from("sos_alerts")
-      .select(ALERT_COLUMNS)
-      .eq("status", "active")
-      .order("created_at", { ascending: false });
-
-    if (error) {
-      return failFromDatabase(res, "GET /alerts", error, "Database error");
-    }
-
-    res.json(data);
+    const alerts = await getActiveAlerts();
+    res.json(alerts);
   } catch (err) {
     return failFromDatabase(res, "GET /alerts", err, "Database error");
   }
 });
 
-// DELETE alert (mark as handled)
 app.delete("/alerts/:id", async (req, res) => {
   const { id } = req.params;
 
@@ -205,9 +298,8 @@ app.delete("/alerts/:id", async (req, res) => {
       return failFromDatabase(res, "DELETE /alerts/:id", error, "Database error");
     }
 
-    // Intentionally idempotent. An alert that is already handled, or gone,
-    // still reports success: the dashboard's handler has no catch block, so a
-    // 404 on a double click would abort its refresh and strand the card.
+    const alerts = await getActiveAlerts();
+    broadcastUpdate(alerts);
     res.json({ message: "Alert handled and removed" });
   } catch (err) {
     return failFromDatabase(res, "DELETE /alerts/:id", err, "Database error");
@@ -222,8 +314,6 @@ app.get("/alert-status/:phone", async (req, res) => {
   }
 
   try {
-    // Ordered by created_at rather than id: uuids carry no ordering, and the
-    // newest SOS is what "latest status" means.
     const { data, error } = await supabase
       .from("sos_alerts")
       .select("status")
@@ -245,19 +335,11 @@ app.get("/alert-status/:phone", async (req, res) => {
   }
 });
 
-/* ------------------------------------------------------------------ *
- * Fallbacks
- * ------------------------------------------------------------------ */
-
 app.use((req, res) => {
   fail(res, 404, "Route not found", "NOT_FOUND");
 });
 
-// Malformed JSON reaches here from express.json(); without this Express would
-// answer an API caller with an HTML error page.
 app.use((err, req, res, next) => {
-  // A bad request is the caller's mistake, not a server fault. Log one line
-  // for it so real 500s stay findable in the Render logs.
   if (err.type === "entity.parse.failed" || err instanceof SyntaxError) {
     console.warn(`[${req.method} ${req.path}] invalid JSON body`);
     return fail(res, 400, "Invalid JSON body", "VALIDATION_ERROR");
@@ -271,10 +353,6 @@ app.use((err, req, res, next) => {
   console.error("[unhandled]", err);
   fail(res, 500, "Unexpected server error", "INTERNAL_ERROR");
 });
-
-/* ------------------------------------------------------------------ *
- * Startup
- * ------------------------------------------------------------------ */
 
 async function checkDatabase() {
   const { error } = await supabase
@@ -292,4 +370,7 @@ async function checkDatabase() {
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
   checkDatabase();
+  setupRealtime().catch((error) => {
+    console.error("Realtime setup failed", error);
+  });
 });
