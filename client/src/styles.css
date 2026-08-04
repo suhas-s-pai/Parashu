@@ -83,6 +83,31 @@ a { color: inherit; }
 }
 @keyframes ksGrow { from { transform: scaleY(0) } to { transform: scaleY(1) } }
 
+@keyframes ksVoiceCardGlow {
+  0%, 100% { box-shadow: 0 0 0 1px rgba(220, 38, 38, .25), 0 30px 70px -20px rgba(220, 38, 38, .5), var(--shadow-lg); }
+  50% { box-shadow: 0 0 0 1px rgba(220, 38, 38, .4), 0 34px 90px -18px rgba(220, 38, 38, .75), var(--shadow-lg); }
+}
+@keyframes ksVoiceGlowDrift {
+  0%, 100% { transform: translate(0, 0) scale(1); opacity: .85; }
+  50% { transform: translate(2%, -3%) scale(1.08); opacity: 1; }
+}
+@keyframes ksVoicePulse {
+  0% { transform: scale(1); opacity: .7; }
+  100% { transform: scale(1.9); opacity: 0; }
+}
+@keyframes ksWave {
+  0%, 100% { height: 5px; opacity: .55; }
+  50% { height: 22px; opacity: 1; }
+}
+@keyframes ksSosRipple {
+  0% { box-shadow: 0 0 0 0 rgba(220, 38, 38, .55); }
+  100% { box-shadow: 0 0 0 22px rgba(220, 38, 38, 0); }
+}
+@keyframes ksModalIn {
+  from { opacity: 0; transform: translateY(10px) scale(.98); }
+  to { opacity: 1; transform: none; }
+}
+
 .ks-rise { animation: ksRise .35s cubic-bezier(.16, 1, .3, 1) both; }
 .ks-fade { animation: ksFade .35s ease both; }
 
@@ -455,6 +480,10 @@ a { color: inherit; }
   border: 1px solid var(--line);
   border-radius: 10px;
   background: rgba(148, 163, 184, 0.06);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
 }
 
 .ks-nearby-item strong {
@@ -989,6 +1018,41 @@ a { color: inherit; }
   grid-column: 1 / -1;
 }
 
+/* Identifiers stay readable at small sizes and wrap instead of overflowing. */
+.pa-mono {
+  font-family: var(--mono);
+  font-size: 11.5px !important;
+  word-break: break-all;
+}
+
+/* Live tracking inside the expanded incident. The frame re-centres whenever a
+   new location ping moves the caller. */
+.pa-map {
+  position: relative;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  overflow: hidden;
+  background: #0f172a;
+  height: 260px;
+}
+
+.pa-map iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+}
+
+.pa-map--empty {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 13px;
+  height: 140px;
+}
+
 .pa-avatar {
   width: 38px;
   height: 38px;
@@ -1359,61 +1423,202 @@ a { color: inherit; }
 
 .ks-sos {
   position: relative;
+  overflow: hidden;
   width: 100%;
-  height: 132px;
+  height: 138px;
   border: none;
-  border-radius: var(--r-lg);
-  font-size: 30px;
+  border-radius: var(--r-xl);
+  font-size: 32px;
   font-weight: 800;
-  letter-spacing: .16em;
+  letter-spacing: .18em;
   color: #fff;
   background: linear-gradient(180deg, #ef4444, #b91c1c);
   cursor: pointer;
   box-shadow: var(--shadow-lg);
   animation: ksHalo 2.6s ease-out infinite;
-  transition: transform .15s ease, filter .15s ease;
+  transition: transform .15s ease, filter .15s ease, box-shadow .2s ease;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 2px;
 }
-.ks-sos:hover { filter: brightness(1.07); }
-.ks-sos:active { transform: scale(.99); }
-.ks-sos small { font-size: 11.5px; font-weight: 500; letter-spacing: .04em; opacity: .85; }
+.ks-sos:hover { filter: brightness(1.09); transform: translateY(-1px); box-shadow: 0 20px 46px -14px rgba(220, 38, 38, .8); }
+.ks-sos:active { transform: scale(.98); }
+.ks-sos:disabled { opacity: .6; cursor: not-allowed; animation: none; }
+.ks-sos small { font-size: 12px; font-weight: 600; letter-spacing: .05em; opacity: .9; }
 
-.ks-voice {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  width: 100%;
-  padding: 16px;
-  border-radius: var(--r-lg);
-  border: 1px solid var(--line);
-  background: var(--surface);
-  color: var(--text);
-  cursor: pointer;
-  text-align: left;
-  transition: border-color .2s ease, background .2s ease, transform .15s ease;
+.ks-sos__ripple {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  animation: ksSosRipple 2.2s ease-out infinite;
+  pointer-events: none;
 }
-.ks-voice:hover { border-color: var(--line-strong); }
-.ks-voice:active { transform: scale(.995); }
-.ks-voice.is-on { border-color: rgba(37, 99, 235, .5); background: rgba(37, 99, 235, .1); }
 
-.ks-voice__ring {
+/* ==========================================================================
+   Voice Protection — the primary feature card
+   ========================================================================== */
+
+.ks-voicecard {
+  position: relative;
+  width: 100%;
+  border-radius: var(--r-xl);
+  overflow: hidden;
+  isolation: isolate;
+  border: 1px solid rgba(220, 38, 38, .22);
+  background: radial-gradient(120% 140% at 50% -10%, rgba(220, 38, 38, .16), transparent 60%), #150c11;
+  box-shadow: var(--shadow-lg);
+  transition: border-color .3s ease, box-shadow .3s ease, transform .2s ease;
+}
+
+.ks-voicecard.is-off {
+  border-color: var(--line);
+  background: radial-gradient(120% 140% at 50% -10%, rgba(220, 38, 38, .08), transparent 60%), #14161c;
+}
+
+.ks-voicecard.is-on {
+  border-color: rgba(220, 38, 38, .55);
+  box-shadow: 0 0 0 1px rgba(220, 38, 38, .25), 0 30px 70px -20px rgba(220, 38, 38, .55), var(--shadow-lg);
+  animation: ksVoiceCardGlow 2.8s ease-in-out infinite;
+}
+
+.ks-voicecard__glow {
+  position: absolute;
+  inset: -40%;
+  z-index: -1;
+  background: radial-gradient(closest-side, rgba(220, 38, 38, .35), transparent 70%);
+  opacity: 0;
+  transition: opacity .4s ease;
+  pointer-events: none;
+}
+.ks-voicecard.is-on .ks-voicecard__glow { opacity: 1; animation: ksVoiceGlowDrift 6s ease-in-out infinite; }
+
+.ks-voicecard__gear {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 3;
+  width: 34px;
+  height: 34px;
   display: grid;
   place-items: center;
-  width: 54px;
-  height: 54px;
-  flex: none;
   border-radius: 50%;
-  background: rgba(148, 163, 184, .12);
-  color: var(--muted);
-  transition: background .2s ease, color .2s ease;
+  border: 1px solid var(--line);
+  background: rgba(11, 18, 32, .55);
+  backdrop-filter: blur(6px);
+  color: var(--text-2);
+  cursor: pointer;
+  transition: background .2s ease, color .2s ease, transform .2s ease;
 }
-.ks-voice.is-on .ks-voice__ring { background: var(--accent); color: #fff; animation: ksHalo 2.6s ease-out infinite; }
-.ks-voice__text strong { display: block; font-size: 14.5px; font-weight: 600; }
-.ks-voice__text span { font-size: 12px; color: var(--muted); }
+.ks-voicecard__gear:hover { background: rgba(148, 163, 184, .14); color: var(--text); transform: rotate(28deg); }
+
+.ks-voicecard__hit {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  padding: 34px 24px 26px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+}
+
+.ks-voicecard__ring {
+  position: relative;
+  width: 92px;
+  height: 92px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  margin-bottom: 6px;
+  background: rgba(148, 163, 184, .1);
+  color: var(--faint);
+  transition: background .3s ease, color .3s ease;
+}
+.ks-voicecard.is-on .ks-voicecard__ring {
+  background: linear-gradient(180deg, #ef4444, #b91c1c);
+  color: #fff;
+}
+
+.ks-voicecard__pulse {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid rgba(220, 38, 38, .55);
+  opacity: 0;
+}
+.ks-voicecard.is-on .ks-voicecard__pulse { animation: ksVoicePulse 1.8s ease-out infinite; }
+
+.ks-voicecard__status {
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: .02em;
+}
+.ks-voicecard.is-off .ks-voicecard__status { color: var(--text-2); }
+.ks-voicecard.is-on .ks-voicecard__status { color: #fca5a5; }
+
+.ks-voicecard__sub { font-size: 12.5px; color: var(--muted); }
+
+.ks-voicecard__phrases {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 2px;
+}
+.ks-voicecard__phrases span {
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  padding: 3px 9px;
+  border-radius: 999px;
+  color: #fca5a5;
+  background: rgba(220, 38, 38, .14);
+  border: 1px solid rgba(220, 38, 38, .28);
+}
+
+.ks-voicecard__cta {
+  margin-top: 14px;
+  padding: 11px 22px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: .02em;
+  color: #fff;
+  background: linear-gradient(180deg, #ef4444, #b91c1c);
+  box-shadow: 0 12px 26px -12px rgba(220, 38, 38, .8);
+  transition: transform .15s ease, filter .15s ease;
+}
+.ks-voicecard__hit:hover .ks-voicecard__cta { filter: brightness(1.08); transform: translateY(-1px); }
+.ks-voicecard__hit:active .ks-voicecard__cta { transform: scale(.97); }
+.ks-voicecard__cta.is-on {
+  color: var(--text-2);
+  background: rgba(148, 163, 184, .12);
+  box-shadow: none;
+}
+
+/* Waveform, animated only while listening */
+.ks-waveform {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 3px;
+  height: 22px;
+  margin: 2px 0;
+}
+.ks-waveform i {
+  width: 3px;
+  border-radius: 2px;
+  background: linear-gradient(180deg, #f87171, #dc2626);
+  animation: ksWave 1s ease-in-out infinite;
+}
 
 .ks-quick { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
 
@@ -1647,9 +1852,12 @@ a { color: inherit; }
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   padding: 44px 32px;
-  overflow: hidden;
+  /* Two sign-in systems make this column taller than the viewport on short
+     screens, so it scrolls rather than clipping the admin form. */
+  overflow-y: auto;
+  max-height: 100vh;
 }
 .ks-auth__panel::before {
   content: "";
@@ -1664,7 +1872,9 @@ a { color: inherit; }
   pointer-events: none;
 }
 
-.ks-auth__form { position: relative; z-index: 1; width: 100%; max-width: 360px; animation: ksRise .45s cubic-bezier(.16, 1, .3, 1) both; }
+/* margin auto centres it vertically while there is room, and lets it scroll
+   from the top once the two cards outgrow the viewport. */
+.ks-auth__form { position: relative; z-index: 1; width: 100%; max-width: 380px; margin: auto 0; animation: ksRise .45s cubic-bezier(.16, 1, .3, 1) both; }
 .ks-auth__eyebrow { margin: 0 0 6px; font-size: 10.5px; font-weight: 700; letter-spacing: .13em; text-transform: uppercase; color: var(--faint); }
 .ks-auth__title { margin: 0 0 4px; font-size: 24px; font-weight: 700; letter-spacing: -0.03em; }
 .ks-auth__sub { margin: 0 0 24px; font-size: 13px; color: var(--muted); }
@@ -1762,6 +1972,170 @@ a { color: inherit; }
 }
 
 /* ==========================================================================
+   Voice settings modal
+   ========================================================================== */
+
+.ks-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 0;
+  background: rgba(4, 7, 14, .68);
+  backdrop-filter: blur(4px);
+  animation: ksFade .2s ease;
+}
+
+.ks-modal {
+  width: 100%;
+  max-width: 440px;
+  max-height: 88vh;
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-xl) var(--r-xl) 0 0;
+  box-shadow: var(--shadow-lg);
+  animation: ksModalIn .22s ease;
+}
+
+.ks-modal__head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 16px 14px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+.ks-modal__icon {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: rgba(220, 38, 38, .16);
+  color: #fca5a5;
+  flex: none;
+}
+.ks-modal__head h2 { margin: 0; font-size: 15px; font-weight: 700; flex: 1; }
+.ks-modal__close {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.ks-modal__close:hover { background: rgba(148, 163, 184, .1); color: var(--text); }
+
+.ks-modal__body { padding: 18px 16px; display: grid; gap: 18px; }
+.ks-modal__section { display: grid; gap: 8px; }
+.ks-modal__label { font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.ks-modal__hint { margin: 0; font-size: 12px; color: var(--faint); }
+
+.ks-segmented {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  padding: 4px;
+  border-radius: 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+}
+.ks-segmented__opt {
+  padding: 9px 6px;
+  border-radius: 9px;
+  border: none;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .15s ease, color .15s ease;
+}
+.ks-segmented__opt.is-active { background: var(--accent); color: #fff; }
+
+.ks-phrasepills { display: flex; flex-wrap: wrap; gap: 6px; }
+.ks-phrasepill {
+  font-size: 12px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  color: var(--text-2);
+  background: rgba(148, 163, 184, .1);
+  border: 1px solid var(--line);
+}
+
+.ks-modal__row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.ks-modal__row strong { display: block; font-size: 13px; font-weight: 600; }
+.ks-modal__row p { margin: 2px 0 0; font-size: 11.5px; color: var(--muted); }
+
+.ks-modal__foot {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  gap: 10px;
+  padding: 14px 16px calc(14px + env(safe-area-inset-bottom, 0px));
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+}
+.ks-modal__foot .ks-btn { flex: 1; justify-content: center; }
+
+/* ==========================================================================
+   Live location stat grid, safety resources, input validation
+   ========================================================================== */
+
+.ks-geostats {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  margin-top: 12px;
+}
+.ks-geostats__item {
+  padding: 9px 11px;
+  border-radius: 10px;
+  background: rgba(148, 163, 184, .05);
+  border: 1px solid var(--line);
+}
+.ks-geostats__item--wide { grid-column: 1 / -1; }
+.ks-geostats__item span {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--faint);
+  margin-bottom: 3px;
+}
+.ks-geostats__item strong { font-size: 13px; font-weight: 600; }
+
+.ks-safety { display: grid; gap: 10px; }
+.ks-safety__title { margin: 4px 0 0; font-size: 13px; font-weight: 700; color: var(--text-2); }
+
+.ks-nearby-item__icon {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex: none;
+  border-radius: 9px;
+  background: rgba(148, 163, 184, .1);
+  color: var(--muted);
+}
+
+.ks-searchwrap.is-valid .ks-input { border-color: rgba(22, 163, 74, .5); }
+.ks-searchwrap.is-invalid .ks-input { border-color: rgba(245, 158, 11, .45); }
+.ks-inputok { position: absolute; top: 50%; right: 11px; transform: translateY(-50%); color: var(--success); }
+
+/* ==========================================================================
    Responsive
    ========================================================================== */
 
@@ -1795,6 +2169,153 @@ a { color: inherit; }
   .ks-statusgrid { grid-template-columns: 1fr; }
   .ks-quick { grid-template-columns: 1fr; }
   .ks-metric--hideable { display: none; }
+  .ks-geostats { grid-template-columns: 1fr; }
+  .ks-voicecard__hit { padding: 28px 18px 22px; }
+  .ks-voicecard__ring { width: 80px; height: 80px; }
+  .ks-sos { height: 122px; font-size: 27px; }
+  .ks-modal__body { padding: 16px 14px; }
+}
+
+@media (max-width: 400px) {
+  .ks-home__main { padding: 18px 12px 26px; gap: 12px; }
+  .ks-sos { font-size: 24px; letter-spacing: .14em; }
+  .ks-voicecard__cta { padding: 10px 16px; font-size: 12.5px; }
+  .ks-phonerow { flex-direction: column; align-items: stretch; }
+  .ks-phonerow .ks-btn { width: 100%; justify-content: center; }
+}
+
+@media (min-width: 900px) {
+  .ks-home__main { max-width: 750px; padding-top: 32px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ks-voicecard.is-on,
+  .ks-voicecard__glow,
+  .ks-voicecard__pulse,
+  .ks-waveform i,
+  .ks-sos,
+  .ks-sos__ripple {
+    animation: none !important;
+  }
+}
+
+/* ==========================================================================
+   Boot, session and contact-number states
+   ========================================================================== */
+
+/* Shown while getSession() resolves, and when the Supabase keys are missing. */
+.ks-boot {
+  min-height: 100vh;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 10px;
+  padding: 32px;
+  text-align: center;
+}
+
+.ks-boot__mark {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  color: #fff;
+  background: linear-gradient(135deg, var(--emergency), #b91c1c);
+  box-shadow: 0 10px 30px -12px rgba(220, 38, 38, 0.9);
+}
+
+.ks-boot strong { font-size: 15px; }
+
+.ks-boot p {
+  margin: 0;
+  max-width: 420px;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+.ks-home__notice {
+  margin: -6px 0 0;
+  max-width: 420px;
+  text-align: center;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-2);
+}
+
+.ks-phonerow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.ks-phonerow .ks-searchwrap { flex: 1 1 220px; }
+
+/* ==========================================================================
+   Login — two clearly separated sign-in systems on one page
+   ========================================================================== */
+
+.ks-authcard {
+  padding: 18px;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--line);
+  background: rgba(148, 163, 184, .04);
+}
+
+/* The admin block reads as a different system, not another option in the
+   same list, so it carries the emergency accent instead of the neutral one. */
+.ks-authcard--admin {
+  border-color: rgba(220, 38, 38, .28);
+  background: linear-gradient(180deg, rgba(220, 38, 38, .07), rgba(220, 38, 38, .02));
+}
+
+.ks-authcard__head {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  margin-bottom: 16px;
+}
+
+.ks-authcard__badge {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  flex: none;
+  border-radius: 10px;
+}
+.ks-authcard__badge--user { background: rgba(37, 99, 235, .16); color: #93c5fd; }
+.ks-authcard__badge--admin { background: rgba(220, 38, 38, .18); color: #fca5a5; }
+
+.ks-authcard__title { margin: 0; font-size: 15px; font-weight: 700; letter-spacing: -0.02em; }
+.ks-authcard__sub { margin: 1px 0 0; font-size: 11.5px; color: var(--muted); }
+
+.ks-authcard__error {
+  margin: 0;
+  font-size: 12px;
+  color: #fca5a5;
+}
+
+/* Separator that names the audience change between the two systems. */
+.ks-authsplit {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 20px 0;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.ks-authsplit::before,
+.ks-authsplit::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--line);
 }
 
 @media print {

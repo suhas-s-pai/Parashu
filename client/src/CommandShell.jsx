@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
-import axios from "axios";
-import { signOutUser } from "./lib/supabaseClient";
+import { useAuth } from "./lib/authContext";
+import { pingBackend } from "./lib/api";
 import {
   ShieldAlert,
   LayoutDashboard,
@@ -38,7 +38,7 @@ export default function CommandShell({
   children,
   wide = false,
 }) {
-  const user = JSON.parse(localStorage.getItem("user") || "null");
+  const { user, signOut } = useAuth();
 
   const [now, setNow] = useState(new Date());
   const [apiHealth, setApiHealth] = useState("checking");
@@ -53,9 +53,7 @@ export default function CommandShell({
 
     const ping = async () => {
       try {
-        await axios.get("https://kalisos-backend.onrender.com/", {
-          timeout: 8000,
-        });
+        await pingBackend();
         if (!cancelled) setApiHealth("online");
       } catch {
         if (!cancelled) setApiHealth("offline");
@@ -70,11 +68,6 @@ export default function CommandShell({
       clearInterval(timer);
     };
   }, []);
-
-  const logout = async () => {
-    await signOutUser();
-    window.location.reload();
-  };
 
   const healthChip =
     apiHealth === "online"
@@ -117,7 +110,7 @@ export default function CommandShell({
         </nav>
 
         <div className="ks-sidebar__foot">
-          <button className="ks-nav__item" onClick={logout} title="Logout">
+          <button className="ks-nav__item" onClick={signOut} title="Logout">
             <LogOut size={17} strokeWidth={1.8} />
             <span>Logout</span>
           </button>

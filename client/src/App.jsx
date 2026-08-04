@@ -1,121 +1,149 @@
-import { useEffect, useState } from "react";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { ShieldAlert } from "lucide-react";
 import Login from "./Login";
-import { Routes, Route, Navigate } from "react-router-dom";
 import Dashboard from "./Dashboard";
 import Home from "./Home";
 import MapGrid from "./MapGrid";
 import Insights from "./Insights";
 import Reports from "./Reports";
 import Settings from "./Settings";
-import { supabase, buildUserFromSession } from "./lib/supabaseClient";
+import { useAuth } from "./lib/authContext";
+import { configProblem } from "./lib/supabaseClient";
 
-export default function App() {
+function Boot({ title, detail }) {
+  return (
+    <div className="ks-boot">
+      <span className="ks-boot__mark">
+        <ShieldAlert size={20} strokeWidth={2.1} />
+      </span>
+      <strong>{title}</strong>
+      {detail && <p>{detail}</p>}
+    </div>
+  );
+}
 
-  const [user,setUser] = useState(() => {
-    if (typeof window === "undefined") {
-      return null;
-    }
+/**
+ * Gate for every signed-in route. The location is carried across so a deep
+ * link such as /dashboard resumes after Google returns, instead of always
+ * dropping the operator on Home.
+ */
+function RequireAuth({ children }) {
+  const { user } = useAuth();
+  const location = useLocation();
 
-    try {
-      return JSON.parse(localStorage.getItem("user"));
-    } catch {
-      return null;
-    }
-  });
-  const [authReady, setAuthReady] = useState(false);
-
-  useEffect(() => {
-    let isMounted = true;
-
-    const syncAuthState = async (session) => {
-      if (!session?.user) {
-        if (typeof window !== "undefined") {
-          localStorage.removeItem("user");
-        }
-        if (isMounted) {
-          setUser(null);
-        }
-        return;
-      }
-
-      const profile = await buildUserFromSession(session);
-      if (profile && isMounted) {
-        setUser(profile);
-      }
-    };
-
-    const restoreSession = async () => {
-      const { data: { session }, error } = await supabase.auth.getSession();
-      if (!isMounted) return;
-
-      if (error) {
-        setAuthReady(true);
-        return;
-      }
-
-      await syncAuthState(session);
-
-      if (isMounted) {
-        setAuthReady(true);
-      }
-    };
-
-    restoreSession();
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (!isMounted) return;
-
-      if (event === "SIGNED_OUT") {
-        if (typeof window !== "undefined") {
-          localStorage.removeItem("user");
-        }
-        setUser(null);
-        setAuthReady(true);
-        return;
-      }
-
-      await syncAuthState(session);
-      if (isMounted) {
-        setAuthReady(true);
-      }
-    });
-
-    return () => {
-      isMounted = false;
-      subscription.unsubscribe();
-    };
-  }, []);
-
-  if (!authReady) {
-    return null;
+  if (!user) {
+    return <Navigate to="/login" replace state={{ from: location.pathname }} />;
   }
 
-  if(!user){
-    return <Login setUser={setUser} />;
+  return children;
+}
+
+/**
+ * Control room gate. A signed-in user who is not an administrator is sent to
+ * Home rather than the login screen — they are authenticated, just not
+ * authorised, and bouncing them to /login would look like a broken session.
+ *
+ * This guard is for navigation only. The backend independently verifies the
+ * access token and admin membership on every alert endpoint, so typing the URL
+ * or calling the API directly still returns nothing.
+ */
+function RequireAdmin({ children }) {
+  const { user, isAdmin } = useAuth();
+  const location = useLocation();
+
+  if (!user) {
+    return <Navigate to="/login" replace state={{ from: location.pathname }} />;
+  }
+
+  if (!isAdmin) {
+    return <Navigate to="/" replace />;
+  }
+
+  return children;
+}
+
+export default function App() {
+  const { status, roleReady } = useAuth();
+
+  if (status === "unconfigured") {
+    return <Boot title="Supabase is not configured" detail={configProblem} />;
+  }
+
+  // Held until getSession() answers and the admin lookup resolves. Rendering
+  // sooner would flash the login screen at a signed-in operator, or bounce an
+  // administrator off /dashboard before their role is known.
+  if (status === "loading" || !roleReady) {
+    return <Boot title="Restoring your session…" />;
   }
 
   return (
-
     <Routes>
+      <Route path="/login" element={<Login />} />
 
-      <Route path="/" element={<Home user={user} />} />
+      <Route
+        path="/"
+        element={
+          <RequireAuth>
+            <Home />
+          </RequireAuth>
+        }
+      />
 
-      <Route path="/dashboard" element={<Dashboard user={user} />} />
+      <Route
+        path="/dashboard"
+        element={
+          <RequireAdmin>
+            <Dashboard />
+          </RequireAdmin>
+        }
+      />
 
-      <Route path="/alerts" element={<Dashboard user={user} focus="feed" />} />
+      <Route
+        path="/alerts"
+        element={
+          <RequireAdmin>
+            <Dashboard focus="active" />
+          </RequireAdmin>
+        }
+      />
 
-      <Route path="/map" element={<MapGrid />} />
+      <Route
+        path="/map"
+        element={
+          <RequireAdmin>
+            <MapGrid />
+          </RequireAdmin>
+        }
+      />
 
-      <Route path="/insights" element={<Insights />} />
+      <Route
+        path="/insights"
+        element={
+          <RequireAdmin>
+            <Insights />
+          </RequireAdmin>
+        }
+      />
 
-      <Route path="/reports" element={<Reports />} />
+      <Route
+        path="/reports"
+        element={
+          <RequireAdmin>
+            <Reports />
+          </RequireAdmin>
+        }
+      />
 
-      <Route path="/settings" element={<Settings />} />
+      <Route
+        path="/settings"
+        element={
+          <RequireAdmin>
+            <Settings />
+          </RequireAdmin>
+        }
+      />
 
       <Route path="*" element={<Navigate to="/" replace />} />
-
     </Routes>
-
   );
-
 }

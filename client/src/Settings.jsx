@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
-import axios from "axios";
+import { useAuth } from "./lib/authContext";
+import { API_BASE, pingBackend } from "./lib/api";
+import { usePrefs } from "./lib/prefs";
 import {
   Settings as SettingsIcon,
   Palette,
@@ -14,8 +16,6 @@ import {
 } from "lucide-react";
 import CommandShell from "./CommandShell";
 
-const PREFS_KEY = "kalisos.prefs";
-
 const CONTACTS = [
   { label: "Police / Emergency", number: "112" },
   { label: "Ambulance", number: "108" },
@@ -23,25 +23,11 @@ const CONTACTS = [
   { label: "Women Helpline", number: "1091" },
 ];
 
-function readPrefs() {
-  try {
-    return JSON.parse(localStorage.getItem(PREFS_KEY)) || {};
-  } catch {
-    return {};
-  }
-}
-
 export default function Settings() {
-  const user = JSON.parse(localStorage.getItem("user") || "null");
+  const { user } = useAuth();
 
-  // Local display preferences. Stored on this device only — there is no
-  // settings endpoint to sync them to.
-  const [prefs, setPrefs] = useState(() => ({
-    sirenOnNewAlert: true,
-    desktopNotifications: false,
-    reduceMotion: false,
-    ...readPrefs(),
-  }));
+  // The same record the control room reads, so a toggle set here holds there.
+  const [prefs, toggle] = usePrefs();
 
   const [apiStatus, setApiStatus] = useState("checking");
   const [geoState, setGeoState] = useState("unknown");
@@ -51,14 +37,9 @@ export default function Settings() {
     Boolean(window.SpeechRecognition || window.webkitSpeechRecognition);
 
   useEffect(() => {
-    localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
-  }, [prefs]);
-
-  useEffect(() => {
     let cancelled = false;
 
-    axios
-      .get("https://kalisos-backend.onrender.com/", { timeout: 8000 })
+    pingBackend()
       .then(() => !cancelled && setApiStatus("online"))
       .catch(() => !cancelled && setApiStatus("offline"));
 
@@ -73,8 +54,6 @@ export default function Settings() {
       cancelled = true;
     };
   }, []);
-
-  const toggle = (key) => setPrefs((p) => ({ ...p, [key]: !p[key] }));
 
   const yesNo = (ok, yes, no) => (
     <span className={`ks-chip ${ok ? "ks-chip--green" : "ks-chip--ghost"}`}>
@@ -114,11 +93,11 @@ export default function Settings() {
           <div className="ks-card" id="general">
             <div className="ks-card__head"><SettingsIcon size={15} strokeWidth={1.8} /><h2>General</h2></div>
             <div className="ks-row">
-              <div className="ks-row__text"><strong>Signed in as</strong><span>Stored on this device only</span></div>
+              <div className="ks-row__text"><strong>Signed in as</strong><span>{user?.email || "Google account"}</span></div>
               <span className="ks-chip ks-chip--blue">{user?.name || "Unknown"}</span>
             </div>
             <div className="ks-row">
-              <div className="ks-row__text"><strong>Contact number</strong><span>Sent with every alert</span></div>
+              <div className="ks-row__text"><strong>Contact number</strong><span>Sent with every alert · change it on the Home screen</span></div>
               <span className="ks-mono">{user?.phone || "—"}</span>
             </div>
             <div className="ks-row">
@@ -146,7 +125,7 @@ export default function Settings() {
           <div className="ks-card" id="notifications">
             <div className="ks-card__head"><Bell size={15} strokeWidth={1.8} /><h2>Notifications</h2></div>
             <div className="ks-row">
-              <div className="ks-row__text"><strong>Siren on new alert</strong><span>Plays when the feed count increases</span></div>
+              <div className="ks-row__text"><strong>Siren on new alert</strong><span>Plays in the control room when a new emergency arrives</span></div>
               <button
                 className={`ks-toggle${prefs.sirenOnNewAlert ? " is-on" : ""}`}
                 onClick={() => toggle("sirenOnNewAlert")}
@@ -206,7 +185,7 @@ export default function Settings() {
           <div className="ks-card" id="system">
             <div className="ks-card__head"><Server size={15} strokeWidth={1.8} /><h2>API &amp; System</h2></div>
             <div className="ks-row">
-              <div className="ks-row__text"><strong>Backend</strong><span>kalisos-backend.onrender.com</span></div>
+              <div className="ks-row__text"><strong>Backend</strong><span>{API_BASE.replace(/^https?:\/\//, "")}</span></div>
               {yesNo(apiStatus === "online", "Online", apiStatus === "checking" ? "Checking" : "Unreachable")}
             </div>
             <div className="ks-row">
@@ -214,8 +193,8 @@ export default function Settings() {
               <span className="ks-chip ks-chip--ghost">via backend</span>
             </div>
             <div className="ks-row">
-              <div className="ks-row__text"><strong>Alert feed interval</strong><span>Control room polling rate</span></div>
-              <span className="ks-mono">2s</span>
+              <div className="ks-row__text"><strong>Alert feed</strong><span>Server sent events from /alerts/stream</span></div>
+              <span className="ks-mono">realtime</span>
             </div>
           </div>
 

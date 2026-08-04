@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import axios from "axios";
+import { fetchActiveAlerts } from "./lib/api";
+import { normalizeAlert } from "./lib/alerts";
 import {
   Search,
   Download,
@@ -30,8 +31,8 @@ export default function Reports() {
 
     const load = async () => {
       try {
-        const res = await axios.get("https://kalisos-backend.onrender.com/alerts");
-        if (!cancelled) setAlerts(res.data);
+        const data = await fetchActiveAlerts();
+        if (!cancelled) setAlerts(data.map(normalizeAlert));
       } catch {
         /* the top bar reports reachability */
       }

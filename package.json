@@ -1,6 +1,13 @@
 {
-  "dependencies": {
-    "leaflet": "^1.9.4",
-    "react-leaflet": "^5.0.0"
+  "name": "parashu",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Parashu — women safety emergency response platform (React + Vite client, Express + Supabase server)",
+  "scripts": {
+    "install:all": "npm --prefix client install && npm --prefix server install",
+    "dev": "npm --prefix client run dev",
+    "dev:server": "npm --prefix server run start",
+    "build": "npm --prefix client run build",
+    "lint": "npm --prefix client run lint"
   }
 }

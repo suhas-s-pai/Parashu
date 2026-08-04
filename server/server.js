@@ -8,17 +8,21 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // Columns are selected explicitly so the JSON sent to the client keeps the
-// exact shape the frontend already expects. The table column is `name`, but
-// the API has always returned `user_name`, so PostgREST aliases it back.
+// exact shape the frontend expects. The table column is `name`, but the API
+// has always returned `user_name`, so PostgREST aliases it back.
 const ALERT_COLUMNS =
-  "id, user_name:name, phone, latitude, longitude, status, created_at, updated_at";
-const ALERT_COLUMNS_WITH_META = `${ALERT_COLUMNS}, email, trigger_type`;
+  "id, user_id, user_name:name, email, phone, latitude, longitude, trigger_type, status, created_at, updated_at";
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const MAX_NAME_LENGTH = 120;
 const MAX_PHONE_LENGTH = 32;
+const MAX_EMAIL_LENGTH = 254;
+const MAX_TRIGGER_LENGTH = 48;
+
+const MIGRATION_HINT =
+  "Database is missing a column. Run server/migrations/001_admins_and_emergency_fields.sql in the Supabase SQL editor.";
 
 // Restrict origins in production by setting CORS_ORIGIN to a comma separated
 // list. Left unset, behaviour is unchanged from before (any origin).
@@ -29,7 +33,7 @@ const allowedOrigins = (process.env.CORS_ORIGIN || "")
 
 app.use(cors(allowedOrigins.length ? { origin: allowedOrigins } : {}));
 
-// Payloads are four short fields; anything larger is abuse, not a caller.
+// Payloads are a handful of short fields; anything larger is abuse, not a caller.
 app.use(express.json({ limit: "10kb" }));
 
 const sseClients = new Set();
@@ -46,8 +50,17 @@ function fail(res, statusCode, message, errorCode) {
   });
 }
 
+function isMissingColumn(error) {
+  return /column .* does not exist/i.test(error?.message || "");
+}
+
 function failFromDatabase(res, context, error, message) {
   console.error(`[${context}]`, error);
+
+  if (isMissingColumn(error)) {
+    return fail(res, 500, MIGRATION_HINT, "SCHEMA_OUT_OF_DATE");
+  }
+
   return fail(res, 500, message, "DATABASE_ERROR");
 }
 
@@ -79,6 +92,11 @@ function readCoordinate(value, label, limit) {
   return { value: number };
 }
 
+function readOptionalText(value, maxLength, fallback = "") {
+  if (typeof value !== "string") return fallback;
+  return value.trim().slice(0, maxLength) || fallback;
+}
+
 function readSosPayload(body) {
   const name = readText(body.user_name, "user_name", MAX_NAME_LENGTH);
   if (name.error) return { error: name.error };
@@ -92,84 +110,128 @@ function readSosPayload(body) {
   const longitude = readCoordinate(body.longitude, "longitude", 180);
   if (longitude.error) return { error: longitude.error };
 
-  const email = typeof body.email === "string" ? body.email.trim() : "";
-  const triggerType = typeof body.trigger_type === "string" ? body.trigger_type.trim() : "Manual SOS";
-
   return {
     value: {
       name: name.value,
       phone: phone.value,
       latitude: latitude.value,
       longitude: longitude.value,
-      email,
-      trigger_type: triggerType,
+      email: readOptionalText(body.email, MAX_EMAIL_LENGTH),
+      trigger_type: readOptionalText(body.trigger_type, MAX_TRIGGER_LENGTH, "Manual SOS"),
     },
   };
 }
 
-async function getActiveAlerts() {
-  const attempts = [
-    { columns: ALERT_COLUMNS_WITH_META, fallback: false },
-    { columns: ALERT_COLUMNS, fallback: true },
-  ];
+/* ------------------------------------------------------------------ *
+ * Authentication
+ *
+ * Every route below carries real emergency data — names, phone numbers and
+ * the live position of someone in danger. None of it may be readable without
+ * a verified Supabase session, so the access token is checked against the
+ * auth server on every request rather than trusted from the request body.
+ * ------------------------------------------------------------------ */
 
-  for (const attempt of attempts) {
-    const { data, error } = await supabase
-      .from("sos_alerts")
-      .select(attempt.columns)
-      .eq("status", "active")
-      .order("created_at", { ascending: false });
+function readAccessToken(req) {
+  const header = req.headers.authorization || "";
 
-    if (!error) {
-      return (data || []).map((row) => ({
-        ...row,
-        user_name: row.user_name || row.name || "Unknown",
-        email: row.email || "",
-        trigger_type: row.trigger_type || "Manual SOS",
-      }));
+  if (header.startsWith("Bearer ")) {
+    return header.slice(7).trim();
+  }
+
+  // EventSource cannot set headers, so the SSE stream passes its token as a
+  // query parameter instead.
+  return typeof req.query.access_token === "string" ? req.query.access_token : "";
+}
+
+async function requireUser(req, res, next) {
+  const token = readAccessToken(req);
+
+  if (!token) {
+    return fail(res, 401, "Sign in required", "UNAUTHENTICATED");
+  }
+
+  try {
+    const { data, error } = await supabase.auth.getUser(token);
+
+    if (error || !data?.user) {
+      return fail(res, 401, "Session is invalid or expired", "UNAUTHENTICATED");
     }
 
-    const message = error.message || "";
-    if (!attempt.fallback && /column .* does not exist/i.test(message)) {
-      continue;
-    }
+    req.authUser = data.user;
+    return next();
+  } catch (err) {
+    console.error("[auth] token verification failed", err);
+    return fail(res, 401, "Could not verify your session", "UNAUTHENTICATED");
+  }
+}
 
+async function requireAdmin(req, res, next) {
+  return requireUser(req, res, async () => {
+    try {
+      const { data, error } = await supabase
+        .from("admins")
+        .select("user_id")
+        .eq("user_id", req.authUser.id)
+        .maybeSingle();
+
+      if (error) {
+        console.error("[auth] admin lookup failed", error);
+        return fail(res, 500, "Could not verify administrator access", "DATABASE_ERROR");
+      }
+
+      if (!data) {
+        return fail(res, 403, "Administrator access required", "FORBIDDEN");
+      }
+
+      return next();
+    } catch (err) {
+      console.error("[auth] admin lookup threw", err);
+      return fail(res, 500, "Could not verify administrator access", "INTERNAL_ERROR");
+    }
+  });
+}
+
+/* ------------------------------------------------------------------ *
+ * Data access
+ * ------------------------------------------------------------------ */
+
+async function getAlertsByStatus(status, limit) {
+  let query = supabase
+    .from("sos_alerts")
+    .select(ALERT_COLUMNS)
+    .eq("status", status)
+    .order("created_at", { ascending: false });
+
+  if (limit) {
+    query = query.limit(limit);
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
     throw error;
   }
 
-  return [];
+  return data || [];
 }
 
-async function insertAlert(payload) {
-  const basePayload = {
-    name: payload.name,
-    phone: payload.phone,
-    latitude: payload.latitude,
-    longitude: payload.longitude,
-  };
+const getActiveAlerts = () => getAlertsByStatus("active");
 
-  const optionalPayload = {};
-  if (payload.email) {
-    optionalPayload.email = payload.email;
-  }
-  if (payload.trigger_type) {
-    optionalPayload.trigger_type = payload.trigger_type;
-  }
-
-  const { error } = await supabase.from("sos_alerts").insert({ ...basePayload, ...optionalPayload });
-
-  if (error && /column .* does not exist/i.test(error.message || "")) {
-    return supabase.from("sos_alerts").insert(basePayload);
-  }
-
-  return { error };
-}
+// The control room history panel. Capped so a long lived deployment cannot
+// return an unbounded payload to the browser.
+const getResolvedAlerts = () => getAlertsByStatus("handled", 100);
 
 function broadcastUpdate(alerts) {
   const payload = JSON.stringify({ alerts });
   for (const client of sseClients) {
     client.write(`event: update\ndata: ${payload}\n\n`);
   }
+}
+
+async function broadcastActiveAlerts() {
+  const alerts = await getActiveAlerts();
+  broadcastUpdate(alerts);
+  return alerts;
 }
 
 async function setupRealtime() {
@@ -180,8 +242,7 @@ async function setupRealtime() {
     { event: "*", schema: "public", table: "sos_alerts" },
     async () => {
       try {
-        const alerts = await getActiveAlerts();
-        broadcastUpdate(alerts);
+        await broadcastActiveAlerts();
       } catch (error) {
         console.error("[realtime] failed to broadcast", error);
       }
@@ -201,7 +262,8 @@ app.get("/", (req, res) => {
   res.send("Parashu backend running");
 });
 
-app.get("/alerts/stream", async (req, res) => {
+// Control room feed. Admin only — this streams live positions.
+app.get("/alerts/stream", requireAdmin, async (req, res) => {
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache, no-transform");
   res.setHeader("Connection", "keep-alive");
@@ -225,7 +287,8 @@ app.get("/alerts/stream", async (req, res) => {
   });
 });
 
-app.post("/sos", async (req, res) => {
+// Raise an emergency, or update the position of one already open.
+app.post("/sos", requireUser, async (req, res) => {
   const payload = readSosPayload(req.body || {});
 
   if (payload.error) {
@@ -233,6 +296,10 @@ app.post("/sos", async (req, res) => {
   }
 
   const { name, phone, latitude, longitude, email, trigger_type } = payload.value;
+
+  // Taken from the verified token, never from the request body, so an alert
+  // can never be attributed to another account.
+  const userId = req.authUser.id;
 
   try {
     const { count, error: updateError } = await supabase
@@ -246,41 +313,55 @@ app.post("/sos", async (req, res) => {
     }
 
     if (count > 0) {
-      const alerts = await getActiveAlerts();
-      broadcastUpdate(alerts);
+      await broadcastActiveAlerts();
       return res.json({ message: "Location updated" });
     }
 
-    const { error: insertError } = await insertAlert({ name, phone, latitude, longitude, email, trigger_type });
+    const { error: insertError } = await supabase.from("sos_alerts").insert({
+      user_id: userId,
+      name,
+      email: email || req.authUser.email || "",
+      phone,
+      latitude,
+      longitude,
+      trigger_type,
+    });
 
     if (insertError) {
+      // Two pings raced and the partial unique index rejected the second.
+      // The first one created the alert, so this is a success for the caller.
       if (insertError.code === "23505") {
-        const alerts = await getActiveAlerts();
-        broadcastUpdate(alerts);
+        await broadcastActiveAlerts();
         return res.json({ message: "Location updated" });
       }
 
       return failFromDatabase(res, "POST /sos insert", insertError, "Insert error");
     }
 
-    const alerts = await getActiveAlerts();
-    broadcastUpdate(alerts);
+    await broadcastActiveAlerts();
     return res.json({ message: "SOS alert created" });
   } catch (err) {
     return failFromDatabase(res, "POST /sos", err, "Database error");
   }
 });
 
-app.get("/alerts", async (req, res) => {
+app.get("/alerts", requireAdmin, async (req, res) => {
   try {
-    const alerts = await getActiveAlerts();
-    res.json(alerts);
+    res.json(await getActiveAlerts());
   } catch (err) {
     return failFromDatabase(res, "GET /alerts", err, "Database error");
   }
 });
 
-app.delete("/alerts/:id", async (req, res) => {
+app.get("/alerts/history", requireAdmin, async (req, res) => {
+  try {
+    res.json(await getResolvedAlerts());
+  } catch (err) {
+    return failFromDatabase(res, "GET /alerts/history", err, "Database error");
+  }
+});
+
+app.delete("/alerts/:id", requireAdmin, async (req, res) => {
   const { id } = req.params;
 
   if (!UUID_PATTERN.test(id)) {
@@ -298,15 +379,15 @@ app.delete("/alerts/:id", async (req, res) => {
       return failFromDatabase(res, "DELETE /alerts/:id", error, "Database error");
     }
 
-    const alerts = await getActiveAlerts();
-    broadcastUpdate(alerts);
+    await broadcastActiveAlerts();
     res.json({ message: "Alert handled and removed" });
   } catch (err) {
     return failFromDatabase(res, "DELETE /alerts/:id", err, "Database error");
   }
 });
 
-app.get("/alert-status/:phone", async (req, res) => {
+// Polled by the person who raised the alert, to learn when it was closed.
+app.get("/alert-status/:phone", requireUser, async (req, res) => {
   const phone = readText(req.params.phone, "phone", MAX_PHONE_LENGTH);
 
   if (phone.error) {
@@ -355,15 +436,26 @@ app.use((err, req, res, next) => {
 });
 
 async function checkDatabase() {
-  const { error } = await supabase
-    .from("sos_alerts")
-    .select("id", { count: "exact", head: true });
+  const { error } = await supabase.from("sos_alerts").select(ALERT_COLUMNS).limit(1);
 
-  if (error) {
-    console.error("Supabase connection failed:", error.message);
+  if (!error) {
+    console.log("Supabase connected — sos_alerts ready");
+  } else if (isMissingColumn(error)) {
+    console.error(`Supabase connected, but the schema is out of date. ${MIGRATION_HINT}`);
   } else {
-    console.log("Supabase Connected");
-    console.log("sos_alerts table ready");
+    console.error("Supabase connection failed:", error.message);
+  }
+
+  const { error: adminsError } = await supabase
+    .from("admins")
+    .select("user_id", { count: "exact", head: true });
+
+  if (adminsError) {
+    console.error(
+      `admins table unavailable (${adminsError.message}). Control room access will be refused until the migration runs.`
+    );
+  } else {
+    console.log("admins table ready");
   }
 }
 

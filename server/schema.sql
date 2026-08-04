@@ -1,6 +1,11 @@
 -- Parashu — Supabase (PostgreSQL) schema
 -- Run this once in the Supabase dashboard: SQL Editor → New query → Run.
 --
+-- This is the full current shape for a fresh project. An existing database
+-- created from the earlier version of this file should run
+-- migrations/001_admins_and_emergency_fields.sql instead, which adds the same
+-- columns without touching existing rows.
+--
 -- ALREADY RAN THE EARLIER VERSION OF THIS FILE?
 -- The primary key changed from bigint to uuid, so the table must be recreated.
 -- If it holds no data you care about:
@@ -9,14 +14,19 @@
 -- drop a table containing real emergency records.
 
 create table if not exists public.sos_alerts (
-  id          uuid        primary key default gen_random_uuid(),
-  name        text        not null,
-  phone       text        not null,
-  latitude    double precision not null,
-  longitude   double precision not null,
-  status      text        not null default 'active',
-  created_at  timestamptz not null default now(),
-  updated_at  timestamptz not null default now(),
+  id            uuid        primary key default gen_random_uuid(),
+  -- The account that raised the alert. Nullable so historical rows stay valid;
+  -- "set null" so closing an account never destroys the emergency record.
+  user_id       uuid        references auth.users (id) on delete set null,
+  name          text        not null,
+  email         text,
+  phone         text        not null,
+  latitude      double precision not null,
+  longitude     double precision not null,
+  trigger_type  text        not null default 'Manual SOS',
+  status        text        not null default 'active',
+  created_at    timestamptz not null default now(),
+  updated_at    timestamptz not null default now(),
 
   constraint sos_alerts_status_check
     check (status in ('active', 'handled')),
@@ -25,6 +35,27 @@ create table if not exists public.sos_alerts (
   constraint sos_alerts_longitude_check
     check (longitude between -180 and 180)
 );
+
+
+-- Who may open the control room. Membership only — passwords and sessions
+-- stay inside Supabase Auth, so no credential is stored by this application.
+create table if not exists public.admins (
+  user_id     uuid        primary key references auth.users (id) on delete cascade,
+  email       text        not null,
+  created_at  timestamptz not null default now()
+);
+
+alter table public.admins enable row level security;
+
+-- A signed-in account may check whether it is itself an admin, and nothing
+-- else — the table cannot be enumerated with the publishable key.
+drop policy if exists "admins read own row" on public.admins;
+
+create policy "admins read own row"
+  on public.admins
+  for select
+  to authenticated
+  using (auth.uid() = user_id);
 
 
 -- Indexes ------------------------------------------------------------------
@@ -36,6 +67,10 @@ create index if not exists sos_alerts_status_created_at_idx
 -- GET /alert-status/:phone: newest row for one caller.
 create index if not exists sos_alerts_phone_created_at_idx
   on public.sos_alerts (phone, created_at desc);
+
+-- Alerts raised by one account.
+create index if not exists sos_alerts_user_id_idx
+  on public.sos_alerts (user_id);
 
 -- POST /sos: one open alert per caller, enforced by the database rather than
 -- by application logic. This also serves the lookup on every 5s location ping.

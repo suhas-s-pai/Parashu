@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import axios from "axios";
+import { fetchActiveAlerts } from "./lib/api";
+import { normalizeAlert } from "./lib/alerts";
 import {
   BarChart3,
   Clock,
@@ -31,9 +32,9 @@ export default function Insights() {
 
     const load = async () => {
       try {
-        const res = await axios.get("https://kalisos-backend.onrender.com/alerts");
+        const data = await fetchActiveAlerts();
         if (!cancelled) {
-          setAlerts(res.data);
+          setAlerts(data.map(normalizeAlert));
           setSampledAt(Date.now());
           setLoaded(true);
         }
