@@ -10,3 +10,5 @@ build
 client/.env
 .env
 node_modules/
+# Claude Code local state (machine-specific, not portable)
+.claude/
