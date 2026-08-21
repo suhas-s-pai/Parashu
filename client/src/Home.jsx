@@ -265,8 +265,6 @@ export default function Home() {
 
     if (!user?.phone) {
       setEditingPhone(true);
-      setNotice("Add a contact number before sending an alert.");
-      return;
     }
 
     sosActiveRef.current = true;
@@ -283,9 +281,9 @@ export default function Home() {
       });
 
       await sendSos({
-        user_name: user.name,
-        phone: user.phone,
-        email: user.email || "",
+        user_name: user?.name || "User",
+        phone: user?.phone || "",
+        email: user?.email || "",
         trigger_type: triggerType,
         latitude: coords.latitude,
         longitude: coords.longitude,

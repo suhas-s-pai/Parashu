@@ -4,7 +4,10 @@ import { supabase } from "./supabaseClient";
 // One place for the backend origin. Override per environment with VITE_API_BASE
 // instead of editing components.
 export const API_BASE = (
-  import.meta.env.VITE_API_BASE || "https://kalisos-backend.onrender.com"
+  import.meta.env.VITE_API_BASE ||
+  (import.meta.env.DEV || (typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"))
+    ? "http://localhost:5000"
+    : "https://kalisos-backend.onrender.com")
 ).replace(/\/+$/, "");
 
 const api = axios.create({ baseURL: API_BASE, timeout: 15000 });

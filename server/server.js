@@ -97,12 +97,15 @@ function readOptionalText(value, maxLength, fallback = "") {
   return value.trim().slice(0, maxLength) || fallback;
 }
 
-function readSosPayload(body) {
-  const name = readText(body.user_name, "user_name", MAX_NAME_LENGTH);
+function readSosPayload(body, authUser) {
+  const nameVal =
+    body.user_name ||
+    authUser?.user_metadata?.full_name ||
+    authUser?.user_metadata?.name ||
+    authUser?.email ||
+    "User";
+  const name = readText(nameVal, "user_name", MAX_NAME_LENGTH);
   if (name.error) return { error: name.error };
-
-  const phone = readText(body.phone, "phone", MAX_PHONE_LENGTH);
-  if (phone.error) return { error: phone.error };
 
   const latitude = readCoordinate(body.latitude, "latitude", 90);
   if (latitude.error) return { error: latitude.error };
@@ -110,13 +113,15 @@ function readSosPayload(body) {
   const longitude = readCoordinate(body.longitude, "longitude", 180);
   if (longitude.error) return { error: longitude.error };
 
+  const phone = readOptionalText(body.phone, MAX_PHONE_LENGTH, "Not provided");
+
   return {
     value: {
       name: name.value,
-      phone: phone.value,
+      phone,
       latitude: latitude.value,
       longitude: longitude.value,
-      email: readOptionalText(body.email, MAX_EMAIL_LENGTH),
+      email: readOptionalText(body.email, MAX_EMAIL_LENGTH, authUser?.email || ""),
       trigger_type: readOptionalText(body.trigger_type, MAX_TRIGGER_LENGTH, "Manual SOS"),
     },
   };
@@ -289,24 +294,28 @@ app.get("/alerts/stream", requireAdmin, async (req, res) => {
 
 // Raise an emergency, or update the position of one already open.
 app.post("/sos", requireUser, async (req, res) => {
-  const payload = readSosPayload(req.body || {});
+  const payload = readSosPayload(req.body || {}, req.authUser);
 
   if (payload.error) {
     return fail(res, 400, payload.error, "VALIDATION_ERROR");
   }
 
   const { name, phone, latitude, longitude, email, trigger_type } = payload.value;
-
-  // Taken from the verified token, never from the request body, so an alert
-  // can never be attributed to another account.
   const userId = req.authUser.id;
 
   try {
-    const { count, error: updateError } = await supabase
+    let updateQuery = supabase
       .from("sos_alerts")
-      .update({ latitude, longitude }, { count: "exact" })
-      .eq("phone", phone)
+      .update({ latitude, longitude, updated_at: new Date().toISOString() }, { count: "exact" })
       .eq("status", "active");
+
+    if (phone && phone !== "Not provided") {
+      updateQuery = updateQuery.or(`user_id.eq.${userId},phone.eq.${phone}`);
+    } else {
+      updateQuery = updateQuery.eq("user_id", userId);
+    }
+
+    const { count, error: updateError } = await updateQuery;
 
     if (updateError) {
       return failFromDatabase(res, "POST /sos update", updateError, "Update error");
@@ -328,8 +337,6 @@ app.post("/sos", requireUser, async (req, res) => {
     });
 
     if (insertError) {
-      // Two pings raced and the partial unique index rejected the second.
-      // The first one created the alert, so this is a success for the caller.
       if (insertError.code === "23505") {
         await broadcastActiveAlerts();
         return res.json({ message: "Location updated" });
