@@ -790,9 +790,18 @@ app.post("/admin-requests/:id/reject", requireAdmin, async (req, res) => {
  * ------------------------------------------------------------------ */
 
 // Serve React index.html for non-API client routes if build dist exists
-app.get("*", (req, res, next) => {
+app.use((req, res, next) => {
+  if (req.method !== "GET") return next();
   const indexPath = path.join(clientDistPath, "index.html");
-  if (fs.existsSync(indexPath) && req.accepts("html") && !req.path.startsWith("/alerts") && !req.path.startsWith("/admins") && !req.path.startsWith("/admin-invitations") && !req.path.startsWith("/admin-requests") && !req.path.startsWith("/sos")) {
+  if (
+    fs.existsSync(indexPath) &&
+    req.accepts("html") &&
+    !req.path.startsWith("/alerts") &&
+    !req.path.startsWith("/admins") &&
+    !req.path.startsWith("/admin-invitations") &&
+    !req.path.startsWith("/admin-requests") &&
+    !req.path.startsWith("/sos")
+  ) {
     return res.sendFile(indexPath);
   }
   return next();
