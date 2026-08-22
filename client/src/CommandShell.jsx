@@ -9,7 +9,6 @@ import {
   Map,
   BarChart3,
   FileText,
-  Settings,
   LogOut,
   Clock,
   Activity,
@@ -23,7 +22,6 @@ const NAV = [
   { to: "/map", label: "Map Grid", icon: Map },
   { to: "/insights", label: "Insights", icon: BarChart3 },
   { to: "/reports", label: "Reports", icon: FileText },
-  { to: "/settings", label: "Settings", icon: Settings },
 ];
 
 /**

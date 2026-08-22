@@ -1,7 +1,6 @@
 /**
  * Console preferences, stored on this device only — there is no settings
- * endpoint to sync them to. The control room and the settings page read and
- * write the same record so a toggle flipped in one place holds in the other.
+ * endpoint to sync them to.
  */
 
 import { useCallback, useEffect, useState } from "react";
@@ -11,8 +10,6 @@ const LEGACY_PREFS_KEY = "kalisos.prefs";
 
 export const DEFAULT_PREFS = {
   sirenOnNewAlert: true,
-  desktopNotifications: false,
-  reduceMotion: false,
   realtime: true,
 };
 

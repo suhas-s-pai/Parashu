@@ -24,7 +24,6 @@ import {
   osmLinkUrl,
 } from "./lib/alerts";
 import { usePrefs } from "./lib/prefs";
-import SettingsPanel from "./Settings";
 import {
   AlertTriangle,
   BellRing,
@@ -39,7 +38,6 @@ import {
   MapPin,
   QrCode,
   Search,
-  Settings as SettingsIcon,
   Share2,
   ShieldAlert,
   ShieldCheck,
@@ -69,7 +67,6 @@ const PAGE_TITLES = {
   active: "Active SOS",
   history: "History",
   admins: "Admins",
-  settings: "Settings",
 };
 
 function getDistanceKm(lat1, lon1, lat2, lon2) {
@@ -1091,15 +1088,6 @@ export default function Dashboard({ focus = "active" }) {
               <span className="pa-badge pa-badge--danger">{adminRequests.length}</span>
             )}
           </button>
-
-          <button
-            type="button"
-            className={`pa-nav-item${tab === "settings" ? " is-active" : ""}`}
-            onClick={() => setTab("settings")}
-          >
-            <SettingsIcon size={17} strokeWidth={1.9} />
-            <span>Settings</span>
-          </button>
         </nav>
 
         <div className="pa-sidebar__foot">
@@ -1154,7 +1142,6 @@ export default function Dashboard({ focus = "active" }) {
           {tab === "active" && renderActiveView()}
           {tab === "history" && renderHistoryView()}
           {tab === "admins" && renderAdminsView()}
-          {tab === "settings" && <SettingsPanel />}
         </div>
       </main>
 

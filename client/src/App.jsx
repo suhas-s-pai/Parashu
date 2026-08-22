@@ -168,15 +168,6 @@ export default function App() {
         }
       />
 
-      <Route
-        path="/settings"
-        element={
-          <RequireAdmin>
-            <Dashboard focus="settings" />
-          </RequireAdmin>
-        }
-      />
-
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
