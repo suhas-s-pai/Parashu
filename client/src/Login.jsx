@@ -32,7 +32,7 @@ function NeonRadarBackground() {
       <div className="pa-neon-glow pa-neon-glow--blue" />
       <div className="pa-neon-glow pa-neon-glow--orange" />
 
-      {/* SVG Thin Concentric Emergency Radar Rings */}
+      {/* SVG Thin Concentric Emergency Radar Rings with Rotating Neon Dark Orange Arc */}
       <svg
         className="pa-radar-svg"
         viewBox="0 0 600 600"
@@ -40,45 +40,59 @@ function NeonRadarBackground() {
         xmlns="http://www.w3.org/2000/svg"
       >
         <defs>
-          {/* Deep Electric Blue to Emergency Red Accent Gradients */}
-          <linearGradient id="emergencyGrad1" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.85" />
-            <stop offset="50%" stopColor="#2563eb" stopOpacity="0.6" />
-            <stop offset="85%" stopColor="#f97316" stopOpacity="0.75" />
-            <stop offset="100%" stopColor="#ef4444" stopOpacity="0.85" />
+          {/* Vibrant Neon Dark Orange Gradient */}
+          <linearGradient id="neonOrangeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#ff7b00" stopOpacity="0.95" />
+            <stop offset="50%" stopColor="#f97316" stopOpacity="0.9" />
+            <stop offset="100%" stopColor="#ea580c" stopOpacity="0.95" />
           </linearGradient>
 
-          <linearGradient id="emergencyGrad2" x1="100%" y1="0%" x2="0%" y2="100%">
-            <stop offset="0%" stopColor="#60a5fa" stopOpacity="0.8" />
-            <stop offset="60%" stopColor="#1d4ed8" stopOpacity="0.5" />
-            <stop offset="100%" stopColor="#f97316" stopOpacity="0.7" />
+          <linearGradient id="emergencyGrad1" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.85" />
+            <stop offset="60%" stopColor="#2563eb" stopOpacity="0.6" />
+            <stop offset="100%" stopColor="#ff6b00" stopOpacity="0.95" />
           </linearGradient>
         </defs>
 
-        {/* 1. Outer Thin Concentric Ring (Rotates Slowly Clockwise) */}
+        {/* 1. Outer Ring Group with Rotating Neon Dark Orange Arc */}
         <g className="pa-radar-group pa-radar-rotate-cw">
-          <circle cx="300" cy="300" r="275" stroke="#2563eb" strokeWidth="1" strokeOpacity="0.3" />
-          <circle cx="300" cy="300" r="275" stroke="url(#emergencyGrad1)" strokeWidth="1.5" strokeDasharray="60 220" strokeOpacity="0.85" />
-          {/* Moving Emergency Indicator Point 1 */}
-          <circle cx="575" cy="300" r="3.5" fill="#f97316" className="pa-particle-glow-orange" />
+          <circle cx="300" cy="300" r="275" stroke="#2563eb" strokeWidth="1" strokeOpacity="0.35" />
+          {/* Vibrant Rotating Neon Dark Orange Ring Arc */}
+          <circle
+            cx="300"
+            cy="300"
+            r="275"
+            stroke="url(#neonOrangeGrad)"
+            strokeWidth="2.4"
+            strokeDasharray="95 185"
+            strokeOpacity="0.95"
+            className="pa-ring-glow-orange"
+          />
+          <circle cx="575" cy="300" r="4.5" fill="#ff7b00" className="pa-particle-glow-orange" />
         </g>
 
-        {/* 2. Middle Ring Group (Rotates Counter-Clockwise) */}
+        {/* 2. Middle Ring Group */}
         <g className="pa-radar-group pa-radar-rotate-ccw">
-          <circle cx="300" cy="300" r="225" stroke="#3b82f6" strokeWidth="1" strokeOpacity="0.25" />
-          <circle cx="300" cy="300" r="225" stroke="url(#emergencyGrad2)" strokeWidth="1.5" strokeDasharray="40 180" strokeOpacity="0.75" />
-          {/* Moving Blue Point 2 */}
+          <circle cx="300" cy="300" r="225" stroke="#3b82f6" strokeWidth="1" strokeOpacity="0.28" />
+          <circle
+            cx="300"
+            cy="300"
+            r="225"
+            stroke="url(#neonOrangeGrad)"
+            strokeWidth="2"
+            strokeDasharray="65 155"
+            strokeOpacity="0.9"
+            className="pa-ring-glow-orange"
+          />
           <circle cx="300" cy="75" r="3.5" fill="#60a5fa" className="pa-particle-glow-blue" />
         </g>
 
-        {/* 3. Inner Ring Group (Rotates Slowly Clockwise) */}
+        {/* 3. Inner Ring Group */}
         <g className="pa-radar-group pa-radar-rotate-cw-slow">
           <circle cx="300" cy="300" r="175" stroke="#2563eb" strokeWidth="1" strokeOpacity="0.3" />
-          <circle cx="300" cy="300" r="175" stroke="#ef4444" strokeWidth="1.4" strokeDasharray="30 200" strokeOpacity="0.8" />
-          {/* Inner Accent Ring */}
+          <circle cx="300" cy="300" r="175" stroke="url(#neonOrangeGrad)" strokeWidth="1.8" strokeDasharray="45 175" strokeOpacity="0.85" className="pa-ring-glow-orange" />
           <circle cx="300" cy="300" r="125" stroke="#3b82f6" strokeWidth="1" strokeOpacity="0.2" />
-          {/* Moving Orange Point 3 */}
-          <circle cx="425" cy="300" r="3" fill="#f97316" className="pa-particle-glow-orange" />
+          <circle cx="425" cy="300" r="3.5" fill="#ff7b00" className="pa-particle-glow-orange" />
         </g>
 
         {/* Minimal Crosshair Axes Lines */}
