@@ -10,6 +10,17 @@ export const API_BASE = (
     : "https://parashu-backend.onrender.com")
 ).replace(/\/+$/, "");
 
+export function getFrontendBaseUrl() {
+  const envUrl = import.meta.env.VITE_APP_URL || import.meta.env.VITE_FRONTEND_URL;
+  if (envUrl) {
+    return envUrl.replace(/\/+$/, "");
+  }
+  if (typeof window !== "undefined" && window.location.origin) {
+    return window.location.origin.replace(/\/+$/, "");
+  }
+  return "https://parashu-frontend.onrender.com";
+}
+
 const api = axios.create({ baseURL: API_BASE, timeout: 15000 });
 
 async function readAccessToken() {

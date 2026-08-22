@@ -15,6 +15,30 @@
       "created_at": "2026-08-22T10:42:18.913Z",
       "expires_at": 1787395333913,
       "status": "expired"
+    },
+    "b3074c3ae7122021d06effb4f96d394293ea13939e13b199": {
+      "id": "ba604c67-7492-4ab9-865d-2f9a7434c5b6",
+      "token": "b3074c3ae7122021d06effb4f96d394293ea13939e13b199",
+      "created_by_admin": "test-admin-uuid",
+      "created_at": "2026-08-22T17:50:39.223Z",
+      "expires_at": 1787421339223,
+      "status": "requested"
+    },
+    "4466bff80376e535e1d2dd8e8019b673a32c0f8c036f2d96": {
+      "id": "7709c50f-d838-4635-b397-8ae24ccfc772",
+      "token": "4466bff80376e535e1d2dd8e8019b673a32c0f8c036f2d96",
+      "created_by_admin": "admin-123",
+      "created_at": "2026-08-22T17:53:50.575Z",
+      "expires_at": 1787421530575,
+      "status": "active"
+    },
+    "cac0f7c72e869bbf81c7e7ca8225bd3cdaa965545c77a486": {
+      "id": "05d532d6-53e9-4dc7-bf13-dcce960ef78f",
+      "token": "cac0f7c72e869bbf81c7e7ca8225bd3cdaa965545c77a486",
+      "created_by_admin": "admin-123",
+      "created_at": "2026-08-22T17:55:18.239Z",
+      "expires_at": 1787421618239,
+      "status": "active"
     }
   },
   "requests": {
@@ -29,6 +53,17 @@
       "status": "pending",
       "created_at": "2026-08-22T10:42:18.911Z",
       "approved_at": null
+    },
+    "83ee8761-699a-4ada-bbf3-27b26dd43d73": {
+      "id": "83ee8761-699a-4ada-bbf3-27b26dd43d73",
+      "invitation_id": "ba604c67-7492-4ab9-865d-2f9a7434c5b6",
+      "token": "b3074c3ae7122021d06effb4f96d394293ea13939e13b199",
+      "name": "Friend Tester",
+      "email": "friend@test.com",
+      "password_hash": "5b29c9dd1c21c313e74d1ee8677d0fe4:6565ae207e04be3017a56dccabd1a3f656bad26b878899ab67b3468899c272998a3b9651cb5c6e7ffea7331eb7bdeee48c0db9ddffb0cc5eed3e6d93dfe293e0",
+      "status": "approved",
+      "created_at": "2026-08-22T17:50:39.269Z",
+      "approved_at": "2026-08-22T17:50:39.271Z"
     }
   }
 }

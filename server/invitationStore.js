@@ -144,6 +144,8 @@ function updateRequestStatus(id, status) {
   if (status === "approved") {
     store.requests[id].approved_at = new Date().toISOString();
   }
+  // Sanitize transient plain text password from store
+  delete store.requests[id].plain_password;
   saveStore();
   return true;
 }

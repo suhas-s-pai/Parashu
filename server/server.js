@@ -1,4 +1,6 @@
 require("dotenv").config();
+const path = require("path");
+const fs = require("fs");
 const express = require("express");
 const cors = require("cors");
 const supabase = require("./supabaseClient");
@@ -7,6 +9,10 @@ const invitationStore = require("./invitationStore");
 const app = express();
 
 const PORT = process.env.PORT || 5000;
+const clientDistPath = path.join(__dirname, "../client/dist");
+if (fs.existsSync(clientDistPath)) {
+  app.use(express.static(clientDistPath));
+}
 
 // Columns are selected explicitly so the JSON sent to the client keeps the
 // exact shape the frontend expects. The table column is `name`, but the API
@@ -607,7 +613,13 @@ app.get("/alert-status/:phone", requireUser, async (req, res) => {
 app.post("/admin-invitations/generate", requireAdmin, async (req, res) => {
   try {
     const invitation = invitationStore.createInvitation(req.authUser?.id);
-    return res.json({ success: true, invitation });
+    return res.json({
+      success: true,
+      token: invitation.token,
+      expiresAt: invitation.expires_at,
+      expires_at: invitation.expires_at,
+      invitation,
+    });
   } catch (err) {
     return fail(res, 500, "Could not generate admin invitation", "SERVER_ERROR");
   }
@@ -706,7 +718,7 @@ app.post("/admin-requests/:id/approve", requireAdmin, async (req, res) => {
 
     let userId = createData?.user?.id;
 
-    // If user already exists in auth, look up user ID from listUsers
+    // If user already exists in auth, look up user ID from listUsers and sync password if provided
     if (!userId) {
       const { data: listData } = await supabase.auth.admin.listUsers();
       const existingUser = listData?.users?.find(
@@ -714,6 +726,16 @@ app.post("/admin-requests/:id/approve", requireAdmin, async (req, res) => {
       );
       if (existingUser) {
         userId = existingUser.id;
+        if (pendingReq.plain_password) {
+          try {
+            await supabase.auth.admin.updateUserById(userId, {
+              password: pendingReq.plain_password,
+              user_metadata: { full_name: pendingReq.name, name: pendingReq.name },
+            });
+          } catch (updateErr) {
+            console.warn("[approve] updateUserById warning:", updateErr?.message);
+          }
+        }
       }
     }
 
@@ -764,8 +786,17 @@ app.post("/admin-requests/:id/reject", requireAdmin, async (req, res) => {
 });
 
 /* ------------------------------------------------------------------ *
- * Global 404 & Error-Handling Middleware (Must be after all routes)
+ * SPA Fallback & Global 404 / Error-Handling Middleware
  * ------------------------------------------------------------------ */
+
+// Serve React index.html for non-API client routes if build dist exists
+app.get("*", (req, res, next) => {
+  const indexPath = path.join(clientDistPath, "index.html");
+  if (fs.existsSync(indexPath) && req.accepts("html") && !req.path.startsWith("/alerts") && !req.path.startsWith("/admins") && !req.path.startsWith("/admin-invitations") && !req.path.startsWith("/admin-requests") && !req.path.startsWith("/sos")) {
+    return res.sendFile(indexPath);
+  }
+  return next();
+});
 
 app.use((req, res) => {
   fail(res, 404, "Route not found", "NOT_FOUND");

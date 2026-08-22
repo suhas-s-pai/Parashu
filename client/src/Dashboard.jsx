@@ -10,6 +10,7 @@ import {
   fetchAdmins,
   deleteAdmin,
   generateAdminInvitation,
+  getFrontendBaseUrl,
   fetchAdminRequests,
   approveAdminRequest,
   rejectAdminRequest,
@@ -499,12 +500,20 @@ export default function Dashboard({ focus = "active" }) {
     setInviteCopied(false);
     try {
       const res = await generateAdminInvitation();
-      if (res.success) {
-        setInviteToken(res.token);
-        const fullUrl = `${window.location.origin}/admin/invite/${res.token}`;
+      const token = res?.token || res?.invitation?.token;
+      const expiresAt = Number(
+        res?.expiresAt || res?.expires_at || res?.invitation?.expires_at || res?.invitation?.expiresAt
+      );
+
+      if (res?.success && token && Number.isFinite(expiresAt)) {
+        setInviteToken(token);
+        const baseUrl = getFrontendBaseUrl();
+        const fullUrl = `${baseUrl}/admin/invite/${token}`;
         setInviteUrl(fullUrl);
-        setInviteExpiresAt(res.expiresAt);
-        setInviteTimeLeft(300);
+        setInviteExpiresAt(expiresAt);
+
+        const initialRemaining = Math.max(0, Math.floor((expiresAt - Date.now()) / 1000));
+        setInviteTimeLeft(initialRemaining);
 
         const qr = await QRCode.toDataURL(fullUrl, {
           width: 240,
@@ -513,6 +522,8 @@ export default function Dashboard({ focus = "active" }) {
         });
         setQrDataUrl(qr);
         setShowInviteModal(true);
+      } else {
+        setStatusMessage("Failed to generate admin invitation.");
       }
     } catch {
       setStatusMessage("Failed to generate admin invitation.");
@@ -522,11 +533,22 @@ export default function Dashboard({ focus = "active" }) {
   };
 
   useEffect(() => {
-    if (!showInviteModal || !inviteExpiresAt) return undefined;
+    if (!showInviteModal || !inviteExpiresAt || !Number.isFinite(Number(inviteExpiresAt))) {
+      return undefined;
+    }
+
+    const expiresAtMs = Number(inviteExpiresAt);
+
+    const updateTimer = () => {
+      const remaining = Math.max(0, Math.floor((expiresAtMs - Date.now()) / 1000));
+      setInviteTimeLeft(remaining);
+      return remaining;
+    };
+
+    updateTimer();
 
     const timer = setInterval(() => {
-      const remaining = Math.max(0, Math.floor((inviteExpiresAt - Date.now()) / 1000));
-      setInviteTimeLeft(remaining);
+      const remaining = updateTimer();
       if (remaining <= 0) {
         clearInterval(timer);
       }
