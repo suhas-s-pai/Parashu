@@ -24,16 +24,15 @@ function GoogleMark() {
   );
 }
 
-// Futuristic Neon Radar & Particle System Background
+// Professional Emergency Response Radar Background (Deep Blue & Orange/Red Accents)
 function NeonRadarBackground() {
   return (
     <div className="pa-neon-radar-system" aria-hidden="true">
-      {/* Soft Ambient Neon Backglows */}
+      {/* Soft Ambient Deep Blue & Emergency Red Halos */}
       <div className="pa-neon-glow pa-neon-glow--blue" />
-      <div className="pa-neon-glow pa-neon-glow--magenta" />
-      <div className="pa-neon-glow pa-neon-glow--red" />
+      <div className="pa-neon-glow pa-neon-glow--orange" />
 
-      {/* SVG Concentric Radar System */}
+      {/* SVG Thin Concentric Emergency Radar Rings */}
       <svg
         className="pa-radar-svg"
         viewBox="0 0 600 600"
@@ -41,52 +40,53 @@ function NeonRadarBackground() {
         xmlns="http://www.w3.org/2000/svg"
       >
         <defs>
-          <linearGradient id="neonGrad1" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#00f0ff" />
-            <stop offset="30%" stopColor="#3b82f6" />
-            <stop offset="60%" stopColor="#a855f7" />
-            <stop offset="85%" stopColor="#ec4899" />
-            <stop offset="100%" stopColor="#ef4444" />
+          {/* Deep Electric Blue to Emergency Red Accent Gradients */}
+          <linearGradient id="emergencyGrad1" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.85" />
+            <stop offset="50%" stopColor="#2563eb" stopOpacity="0.6" />
+            <stop offset="85%" stopColor="#f97316" stopOpacity="0.75" />
+            <stop offset="100%" stopColor="#ef4444" stopOpacity="0.85" />
           </linearGradient>
 
-          <linearGradient id="neonGrad2" x1="100%" y1="0%" x2="0%" y2="100%">
-            <stop offset="0%" stopColor="#38bdf8" />
-            <stop offset="50%" stopColor="#c084fc" />
-            <stop offset="100%" stopColor="#f43f5e" />
+          <linearGradient id="emergencyGrad2" x1="100%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stopColor="#60a5fa" stopOpacity="0.8" />
+            <stop offset="60%" stopColor="#1d4ed8" stopOpacity="0.5" />
+            <stop offset="100%" stopColor="#f97316" stopOpacity="0.7" />
           </linearGradient>
         </defs>
 
-        {/* Outer Ring Group (Rotates Clockwise) */}
+        {/* 1. Outer Thin Concentric Ring (Rotates Slowly Clockwise) */}
         <g className="pa-radar-group pa-radar-rotate-cw">
-          <circle cx="300" cy="300" r="280" stroke="url(#neonGrad1)" strokeWidth="1.8" strokeOpacity="0.85" />
-          <circle cx="300" cy="300" r="270" stroke="#00f0ff" strokeWidth="1.2" strokeDasharray="4 20" strokeOpacity="0.65" />
-          <circle cx="580" cy="300" r="4.5" fill="#00f0ff" className="pa-particle-glow" />
-          <circle cx="20" cy="300" r="4" fill="#ff007f" className="pa-particle-glow" />
+          <circle cx="300" cy="300" r="275" stroke="#2563eb" strokeWidth="1" strokeOpacity="0.3" />
+          <circle cx="300" cy="300" r="275" stroke="url(#emergencyGrad1)" strokeWidth="1.5" strokeDasharray="60 220" strokeOpacity="0.85" />
+          {/* Moving Emergency Indicator Point 1 */}
+          <circle cx="575" cy="300" r="3.5" fill="#f97316" className="pa-particle-glow-orange" />
         </g>
 
-        {/* Middle Ring Group (Rotates Counter-Clockwise) */}
+        {/* 2. Middle Ring Group (Rotates Counter-Clockwise) */}
         <g className="pa-radar-group pa-radar-rotate-ccw">
-          <circle cx="300" cy="300" r="230" stroke="url(#neonGrad2)" strokeWidth="2" strokeDasharray="14 18" strokeOpacity="0.8" />
-          <circle cx="300" cy="300" r="185" stroke="#a855f7" strokeWidth="1.4" strokeOpacity="0.75" />
-          <circle cx="300" cy="70" r="4.5" fill="#38bdf8" className="pa-particle-glow" />
-          <circle cx="300" cy="530" r="4.5" fill="#f43f5e" className="pa-particle-glow" />
+          <circle cx="300" cy="300" r="225" stroke="#3b82f6" strokeWidth="1" strokeOpacity="0.25" />
+          <circle cx="300" cy="300" r="225" stroke="url(#emergencyGrad2)" strokeWidth="1.5" strokeDasharray="40 180" strokeOpacity="0.75" />
+          {/* Moving Blue Point 2 */}
+          <circle cx="300" cy="75" r="3.5" fill="#60a5fa" className="pa-particle-glow-blue" />
         </g>
 
-        {/* Inner Ring Group (Rotates Fast Clockwise) */}
-        <g className="pa-radar-group pa-radar-rotate-cw-fast">
-          <circle cx="300" cy="300" r="140" stroke="#00f0ff" strokeWidth="1.6" strokeDasharray="3 9" strokeOpacity="0.85" />
-          <circle cx="300" cy="300" r="95" stroke="url(#neonGrad1)" strokeWidth="1.4" strokeOpacity="0.9" />
-          <circle cx="300" cy="300" r="55" stroke="#3b82f6" strokeWidth="1.2" strokeOpacity="0.6" />
-          <circle cx="440" cy="300" r="4" fill="#c084fc" className="pa-particle-glow" />
-          <circle cx="160" cy="300" r="4" fill="#06b6d4" className="pa-particle-glow" />
+        {/* 3. Inner Ring Group (Rotates Slowly Clockwise) */}
+        <g className="pa-radar-group pa-radar-rotate-cw-slow">
+          <circle cx="300" cy="300" r="175" stroke="#2563eb" strokeWidth="1" strokeOpacity="0.3" />
+          <circle cx="300" cy="300" r="175" stroke="#ef4444" strokeWidth="1.4" strokeDasharray="30 200" strokeOpacity="0.8" />
+          {/* Inner Accent Ring */}
+          <circle cx="300" cy="300" r="125" stroke="#3b82f6" strokeWidth="1" strokeOpacity="0.2" />
+          {/* Moving Orange Point 3 */}
+          <circle cx="425" cy="300" r="3" fill="#f97316" className="pa-particle-glow-orange" />
         </g>
 
-        {/* Crosshair Axes Lines */}
-        <line x1="300" y1="20" x2="300" y2="580" stroke="#38bdf8" strokeWidth="1" strokeOpacity="0.3" strokeDasharray="6 6" />
-        <line x1="20" y1="300" x2="580" y2="300" stroke="#38bdf8" strokeWidth="1" strokeOpacity="0.3" strokeDasharray="6 6" />
+        {/* Minimal Crosshair Axes Lines */}
+        <line x1="300" y1="20" x2="300" y2="580" stroke="#3b82f6" strokeWidth="0.8" strokeOpacity="0.2" strokeDasharray="4 8" />
+        <line x1="20" y1="300" x2="580" y2="300" stroke="#3b82f6" strokeWidth="0.8" strokeOpacity="0.2" strokeDasharray="4 8" />
       </svg>
 
-      {/* Rotating Radar Wedge Sweep Beam */}
+      {/* Subtle Slow Rotating Radar Sweep Beam */}
       <div className="pa-radar-sweep-container">
         <div className="pa-radar-sweep-beam" />
       </div>
@@ -173,7 +173,7 @@ export default function Login() {
 
   return (
     <div className="pa-auth-page">
-      {/* Futuristic Animated Neon Radar System Background */}
+      {/* Emergency Response Radar Background (Deep Blue + Orange/Red Accents) */}
       <NeonRadarBackground />
 
       <div className="pa-auth-container">
