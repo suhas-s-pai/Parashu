@@ -44,48 +44,54 @@ export function AuthProvider({ children }) {
       setAuthError(oauthError);
     }
 
-    if (!isSupabaseConfigured) {
+    if (!isSupabaseConfigured || !supabase || !supabase.auth) {
+      setStatus("unconfigured");
       return undefined;
     }
 
     let active = true;
 
-    supabase.auth
-      .getSession()
-      .then(({ data, error }) => {
+    try {
+      supabase.auth
+        .getSession()
+        .then(({ data, error }) => {
+          if (!active) return;
+
+          if (error) {
+            setAuthError(error.message);
+          }
+
+          setSession(data?.session ?? null);
+          setStatus("ready");
+        })
+        .catch((error) => {
+          if (!active) return;
+
+          setAuthError(error?.message || "Could not restore your session.");
+          setStatus("ready");
+        });
+
+      const {
+        data: { subscription },
+      } = supabase.auth.onAuthStateChange((event, nextSession) => {
         if (!active) return;
 
-        if (error) {
-          setAuthError(error.message);
+        setSession(nextSession ?? null);
+        setStatus("ready");
+
+        if (event === "SIGNED_IN") {
+          setAuthError("");
         }
-
-        setSession(data?.session ?? null);
-        setStatus("ready");
-      })
-      .catch((error) => {
-        if (!active) return;
-
-        setAuthError(error?.message || "Could not restore your session.");
-        setStatus("ready");
       });
 
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, nextSession) => {
-      if (!active) return;
-
-      setSession(nextSession ?? null);
+      return () => {
+        active = false;
+        subscription?.unsubscribe?.();
+      };
+    } catch (err) {
+      console.error("[AuthProvider] Auth initialization failed:", err);
       setStatus("ready");
-
-      if (event === "SIGNED_IN") {
-        setAuthError("");
-      }
-    });
-
-    return () => {
-      active = false;
-      subscription.unsubscribe();
-    };
+    }
   }, []);
 
   const userId = session?.user?.id ?? null;
@@ -99,7 +105,7 @@ export function AuthProvider({ children }) {
    * row means "not an admin" and never leaks who the other admins are.
    */
   useEffect(() => {
-    if (!userId) return undefined;
+    if (!userId || !supabase) return undefined;
 
     let active = true;
 

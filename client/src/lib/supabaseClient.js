@@ -3,10 +3,20 @@ import { createClient } from "@supabase/supabase-js";
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
+function isValidUrl(url) {
+  if (typeof url !== "string" || !url.trim()) return false;
+  try {
+    const parsed = new URL(url.trim());
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 // Names only — never the values. Rendered by App so a bad .env shows a
 // readable message instead of a blank page.
 const missingSupabaseEnv = [
-  !supabaseUrl && "VITE_SUPABASE_URL",
+  (!supabaseUrl || !isValidUrl(supabaseUrl)) && "VITE_SUPABASE_URL",
   !supabaseAnonKey && "VITE_SUPABASE_ANON_KEY",
 ].filter(Boolean);
 
@@ -30,25 +40,31 @@ function isSecretKey(key) {
  * left to fail silently at the token exchange.
  */
 export const configProblem = missingSupabaseEnv.length
-  ? `Set ${missingSupabaseEnv.join(" and ")} in client/.env, then restart the dev server.`
+  ? `Set ${missingSupabaseEnv.join(" and ")} in your deployment environment variables, then rebuild.`
   : isSecretKey(supabaseAnonKey)
-  ? "VITE_SUPABASE_ANON_KEY holds a secret key. The browser must use the publishable key (sb_publishable_…) or the legacy anon JWT. Replace it, then rotate the exposed secret key in the Supabase dashboard."
+  ? "VITE_SUPABASE_ANON_KEY holds a secret key. The browser must use the publishable key (sb_publishable_…) or the legacy anon JWT."
   : "";
 
 export const isSupabaseConfigured = configProblem === "";
 
-// createClient throws when either value is undefined, so the client is only
-// built once both are present. Every consumer goes through AuthProvider, which
-// short-circuits when the project is unconfigured.
-export const supabase = isSupabaseConfigured
-  ? createClient(supabaseUrl, supabaseAnonKey, {
+let clientInstance = null;
+
+if (isSupabaseConfigured && supabaseUrl && supabaseAnonKey) {
+  try {
+    clientInstance = createClient(supabaseUrl.trim(), supabaseAnonKey.trim(), {
       auth: {
         persistSession: true,
         autoRefreshToken: true,
         detectSessionInUrl: true,
       },
-    })
-  : null;
+    });
+  } catch (err) {
+    console.error("[supabaseClient] Failed to initialize Supabase:", err);
+    clientInstance = null;
+  }
+}
+
+export const supabase = clientInstance;
 
 // Supabase sends the browser back here after Google finishes. This exact
 // origin must also be listed under Authentication → URL Configuration →
