@@ -1727,47 +1727,51 @@ a { color: inherit; }
   box-sizing: border-box;
 }
 
-/* Official Logo Symbol Styling */
-.pa-auth-logo {
-  width: 28px;
-  height: 28px;
-  object-fit: contain;
-  filter: drop-shadow(0 0 10px rgba(220, 38, 38, 0.45));
-  flex: none;
-  transition: transform 0.2s ease, filter 0.2s ease;
-}
-
-.pa-landing-symbol-wrap {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 20px;
-  position: relative;
-}
-
-.pa-landing-symbol-wrap::after {
-  content: "";
-  position: absolute;
-  inset: -14px;
+/* Official Circular Logo Symbol Containers */
+.pa-logo-circle {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(220, 38, 38, 0.25) 0%, transparent 70%);
-  filter: blur(10px);
-  pointer-events: none;
+  overflow: hidden;
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid rgba(220, 38, 38, 0.35);
+  box-shadow: 0 0 10px rgba(220, 38, 38, 0.35);
+  flex: none;
 }
 
-.pa-landing-symbol {
-  width: 76px;
-  height: 76px;
+.pa-logo-circle img {
+  width: 80%;
+  height: 80%;
   object-fit: contain;
+}
+
+.pa-landing-logo-circle {
+  display: inline-grid;
+  place-items: center;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: rgba(15, 23, 42, 0.85);
+  border: 1.5px solid rgba(220, 38, 38, 0.45);
+  box-shadow: 0 0 22px rgba(220, 38, 38, 0.5), inset 0 0 12px rgba(220, 38, 38, 0.2);
+  margin-bottom: 16px;
   position: relative;
   z-index: 1;
-  filter: drop-shadow(0 0 18px rgba(220, 38, 38, 0.5));
   animation: paPulseLogo 4s ease-in-out infinite alternate;
 }
 
+.pa-landing-logo-circle img {
+  width: 80%;
+  height: 80%;
+  object-fit: contain;
+}
+
 @keyframes paPulseLogo {
-  0% { transform: scale(1); filter: drop-shadow(0 0 14px rgba(220, 38, 38, 0.4)); }
-  100% { transform: scale(1.04); filter: drop-shadow(0 0 24px rgba(220, 38, 38, 0.7)); }
+  0% { transform: scale(1); box-shadow: 0 0 16px rgba(220, 38, 38, 0.4), inset 0 0 10px rgba(220, 38, 38, 0.2); }
+  100% { transform: scale(1.04); box-shadow: 0 0 28px rgba(220, 38, 38, 0.65), inset 0 0 16px rgba(220, 38, 38, 0.3); }
 }
 
 /* Responsive Background Glowing Orbs (Desktop, Tablet & Mobile) */
@@ -1928,10 +1932,13 @@ a { color: inherit; }
   box-shadow: var(--shadow-lg);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
 .pa-auth__headline {
-  margin: 0 0 8px;
+  margin: 0 0 6px;
   font-size: 24px;
   font-weight: 800;
   letter-spacing: 0.06em;
@@ -1939,34 +1946,54 @@ a { color: inherit; }
 }
 
 .pa-auth__tagline {
-  margin: 0 0 28px;
+  margin: 0 0 14px;
   font-size: 13.5px;
   line-height: 1.5;
   color: var(--muted);
+}
+
+.pa-auth__accent-line {
+  display: block;
+  width: 48px;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #ef4444, #3b82f6);
+  margin: 0 auto 12px;
+  opacity: 0.8;
+}
+
+.pa-auth__motto {
+  margin: 0 0 24px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #94a3b8;
 }
 
 .pa-landing-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
-  width: 100%;
-  height: 48px;
-  border-radius: var(--r-md);
-  border: 1px solid rgba(239, 68, 68, 0.4);
+  gap: 8px;
+  width: min(280px, 82%);
+  height: 46px;
+  padding: 0 20px;
+  border-radius: 999px;
+  border: 1px solid rgba(239, 68, 68, 0.45);
   background: linear-gradient(135deg, #ef4444, #dc2626);
   color: #ffffff;
-  font-size: 15px;
+  font-size: 14.5px;
   font-weight: 600;
   cursor: pointer;
-  box-shadow: 0 8px 24px rgba(239, 68, 68, 0.35);
+  box-shadow: 0 6px 20px rgba(239, 68, 68, 0.35);
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .pa-landing-btn:hover {
   transform: translateY(-1px);
-  box-shadow: 0 12px 28px rgba(239, 68, 68, 0.5);
-  filter: brightness(1.05);
+  box-shadow: 0 10px 24px rgba(239, 68, 68, 0.48);
+  filter: brightness(1.06);
 }
 
 .pa-landing-btn:active {

@@ -112,7 +112,9 @@ export default function Login() {
       <div className="pa-auth-container">
         {/* Top Brand Header */}
         <div className="pa-auth__brand-header">
-          <img src="/symbol.png" alt="Parashu Logo" className="pa-auth-logo" />
+          <div className="pa-logo-circle">
+            <img src="/symbol.png" alt="Parashu Logo" />
+          </div>
           <div className="pa-auth__brand-text">
             <span className="pa-auth__wordmark">PARASHU</span>
             <span className="pa-auth__subwordmark">Safety Platform</span>
@@ -125,21 +127,31 @@ export default function Login() {
         {/* STEP 0: LANDING */}
         {step === "landing" && (
           <div className="pa-auth__step pa-auth__step--landing">
-            <div className="pa-landing-symbol-wrap">
-              <img src="/symbol.png" alt="Parashu Symbol" className="pa-landing-symbol" />
+            {/* Perfectly Circular Logo Container */}
+            <div className="pa-landing-logo-circle">
+              <img src="/symbol.png" alt="Parashu Symbol" />
             </div>
+
             <h1 className="pa-auth__headline">PARASHU</h1>
             <p className="pa-auth__tagline">
               Emergency Response &amp; Safety Platform
             </p>
 
+            {/* Small elegant accent line below the subtitle */}
+            <span className="pa-auth__accent-line" aria-hidden="true" />
+
+            <p className="pa-auth__motto">
+              Protect. Respond. Connect.
+            </p>
+
+            {/* Compact & Premium Continue Button */}
             <button
               type="button"
               className="pa-landing-btn"
               onClick={() => setStep("selection")}
             >
               <span>Continue to Parashu</span>
-              <ArrowRight size={18} />
+              <ArrowRight size={15} />
             </button>
           </div>
         )}
@@ -327,7 +339,7 @@ export default function Login() {
           </div>
         )}
 
-        <p className="ks-auth__foot">SPRINGX · PARASHU EMERGENCY PLATFORM</p>
+        <p className="ks-auth__foot">SPRINGX &rarr; PARASHU</p>
       </div>
     </div>
   );
