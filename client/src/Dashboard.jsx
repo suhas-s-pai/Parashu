@@ -6,6 +6,9 @@ import {
   fetchResolvedAlerts,
   resolveAlert,
   clearResolvedHistory,
+  fetchAdmins,
+  createAdmin,
+  deleteAdmin,
 } from "./lib/api";
 import {
   formatCoordinates,
@@ -25,10 +28,14 @@ import {
   History,
   LogOut,
   MapPin,
+  Menu,
+  Plus,
   Search,
   Settings as SettingsIcon,
   ShieldAlert,
+  ShieldCheck,
   Trash2,
+  UserPlus,
   UserRound,
   X,
 } from "lucide-react";
@@ -83,6 +90,106 @@ export default function Dashboard({ focus = "active" }) {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteSuccessMsg, setDeleteSuccessMsg] = useState("");
   const [deleteErrorMsg, setDeleteErrorMsg] = useState("");
+
+  const [admins, setAdmins] = useState([]);
+  const [showAddAdminModal, setShowAddAdminModal] = useState(false);
+  const [showRemoveAdminModal, setShowRemoveAdminModal] = useState(false);
+  const [targetAdmin, setTargetAdmin] = useState(null);
+
+  const [newAdminName, setNewAdminName] = useState("");
+  const [newAdminEmail, setNewAdminEmail] = useState("");
+  const [newAdminPassword, setNewAdminPassword] = useState("");
+  const [addAdminError, setAddAdminError] = useState("");
+  const [submittingAdmin, setSubmittingAdmin] = useState(false);
+
+  const [removeAdminError, setRemoveAdminError] = useState("");
+  const [removingAdmin, setRemovingAdmin] = useState(false);
+  const [adminMsg, setAdminMsg] = useState("");
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  const loadAdmins = useCallback(async () => {
+    try {
+      const list = await fetchAdmins();
+      setAdmins(list);
+    } catch {
+      // Failed to load admins list
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeSection === "admins") {
+      loadAdmins();
+    }
+  }, [activeSection, loadAdmins]);
+
+  const handleAddAdminSubmit = async (e) => {
+    e.preventDefault();
+    setAddAdminError("");
+
+    if (!newAdminName.trim()) {
+      setAddAdminError("Administrator name is required.");
+      return;
+    }
+
+    if (!newAdminEmail.trim() || !newAdminEmail.includes("@")) {
+      setAddAdminError("A valid email address is required.");
+      return;
+    }
+
+    if (!newAdminPassword || newAdminPassword.length < 6) {
+      setAddAdminError("Password must be at least 6 characters long.");
+      return;
+    }
+
+    setSubmittingAdmin(true);
+
+    try {
+      await createAdmin({
+        name: newAdminName.trim(),
+        email: newAdminEmail.trim(),
+        password: newAdminPassword,
+      });
+
+      setShowAddAdminModal(false);
+      setNewAdminName("");
+      setNewAdminEmail("");
+      setNewAdminPassword("");
+      setAdminMsg("New administrator account created successfully.");
+      setTimeout(() => setAdminMsg(""), 6000);
+      loadAdmins();
+    } catch (err) {
+      setAddAdminError(
+        err?.response?.data?.message ||
+          err?.message ||
+          "Could not create administrator account."
+      );
+    } finally {
+      setSubmittingAdmin(false);
+    }
+  };
+
+  const handleConfirmRemoveAdmin = async () => {
+    if (!targetAdmin) return;
+    setRemovingAdmin(true);
+    setRemoveAdminError("");
+
+    try {
+      await deleteAdmin(targetAdmin.user_id);
+      setShowRemoveAdminModal(false);
+      setTargetAdmin(null);
+      setAdminMsg("Administrator removed successfully.");
+      setTimeout(() => setAdminMsg(""), 6000);
+      loadAdmins();
+    } catch (err) {
+      setRemoveAdminError(
+        err?.response?.data?.message ||
+          err?.message ||
+          "Could not remove administrator."
+      );
+    } finally {
+      setRemovingAdmin(false);
+    }
+  };
 
   const handleConfirmDeleteHistory = async () => {
     setClearingHistory(true);
@@ -490,6 +597,87 @@ export default function Dashboard({ focus = "active" }) {
     </section>
   );
 
+  const renderAdminsView = () => (
+    <section className="pa-history-panel">
+      <div className="pa-panel-head">
+        <div>
+          <p className="pa-kicker">Access Control</p>
+          <h2>Administrator Management</h2>
+        </div>
+        <button
+          type="button"
+          className="pa-btn pa-btn--danger"
+          onClick={() => {
+            setAddAdminError("");
+            setShowAddAdminModal(true);
+          }}
+        >
+          <UserPlus size={15} />
+          <span>Add New Admin</span>
+        </button>
+      </div>
+
+      {adminMsg && (
+        <div style={{ margin: "12px 0 0", padding: "10px 14px", borderRadius: 8, background: "rgba(34, 197, 94, 0.12)", border: "1px solid rgba(34, 197, 94, 0.3)", color: "#4ade80", fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}>
+          <CheckCircle2 size={16} />
+          {adminMsg}
+        </div>
+      )}
+
+      <div className="pa-history-list" style={{ marginTop: 16 }}>
+        {admins.length === 0 && (
+          <div className="pa-empty-card">
+            <ShieldCheck size={20} />
+            <h3>Loading administrators…</h3>
+          </div>
+        )}
+
+        {admins.map((adm) => {
+          const isSelf = adm.user_id === user?.id || adm.email === user?.email;
+
+          return (
+            <article key={adm.user_id} className="pa-history-card pa-admin-card" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 200 }}>
+                <div className="pa-avatar" style={{ width: 40, height: 40, fontSize: 15, background: isSelf ? "linear-gradient(135deg, #2563eb, #1d4ed8)" : "linear-gradient(135deg, #475569, #334155)" }}>
+                  {adm.name.charAt(0).toUpperCase()}
+                </div>
+                <div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <strong style={{ fontSize: 14 }}>{adm.name}</strong>
+                    {isSelf && <span className="pa-pill pa-pill--neutral" style={{ fontSize: 10 }}>You</span>}
+                  </div>
+                  <p style={{ margin: "2px 0 0", fontSize: 12, color: "var(--muted)" }}>
+                    {adm.email} · ID: <span className="pa-mono" style={{ fontSize: 11 }}>{adm.user_id.slice(0, 8)}…</span>
+                  </p>
+                </div>
+              </div>
+
+              <div style={{ display: "flex", alignItems: "center", gap: 12, marginLeft: "auto" }}>
+                <span className="pa-pill" style={{ fontSize: 11 }}>
+                  Added {formatTime(adm.created_at)}
+                </span>
+                <button
+                  type="button"
+                  className="pa-btn pa-btn--ghost"
+                  style={{ color: "#fca5a5", borderColor: "rgba(239, 68, 68, 0.2)" }}
+                  onClick={() => {
+                    setTargetAdmin(adm);
+                    setRemoveAdminError("");
+                    setShowRemoveAdminModal(true);
+                  }}
+                  title={`Remove ${adm.name}`}
+                >
+                  <Trash2 size={14} />
+                  <span>Remove</span>
+                </button>
+              </div>
+            </article>
+          );
+        })}
+      </div>
+    </section>
+  );
+
   const renderSettingsView = () => (
     <section className="pa-settings-panel">
       <div className="pa-panel-head">
@@ -552,6 +740,7 @@ export default function Dashboard({ focus = "active" }) {
   const NAV = [
     { key: "active", label: "Active SOS", icon: AlertTriangle },
     { key: "history", label: "History", icon: History },
+    { key: "admins", label: "Admins", icon: ShieldCheck },
     { key: "settings", label: "Settings", icon: SettingsIcon },
   ];
 
@@ -559,7 +748,10 @@ export default function Dashboard({ focus = "active" }) {
 
   return (
     <div className="pa-shell">
-      <aside className="pa-sidebar">
+      {sidebarOpen && (
+        <div className="pa-sidebar-backdrop" onClick={() => setSidebarOpen(false)} />
+      )}
+      <aside className={`pa-sidebar${sidebarOpen ? " is-open" : ""}`}>
         <div className="pa-brand">
           <div className="pa-brand__mark">
             <ShieldAlert size={18} />
@@ -568,6 +760,14 @@ export default function Dashboard({ focus = "active" }) {
             <strong>Parashu</strong>
             <span>Control Room</span>
           </div>
+          <button
+            type="button"
+            className="pa-sidebar-close"
+            onClick={() => setSidebarOpen(false)}
+            aria-label="Close menu"
+          >
+            <X size={18} />
+          </button>
         </div>
 
         <nav className="pa-nav">
@@ -577,7 +777,10 @@ export default function Dashboard({ focus = "active" }) {
               <button
                 key={item.key}
                 className={`pa-nav-item${activeSection === item.key ? " is-active" : ""}`}
-                onClick={() => setActiveSection(item.key)}
+                onClick={() => {
+                  setActiveSection(item.key);
+                  setSidebarOpen(false);
+                }}
               >
                 <Icon size={16} />
                 <span>{item.label}</span>
@@ -605,9 +808,19 @@ export default function Dashboard({ focus = "active" }) {
 
       <main className="pa-main">
         <header className="pa-topbar">
-          <div>
-            <p className="pa-kicker">Parashu command center</p>
-            <h1>{heading}</h1>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <button
+              type="button"
+              className="pa-mobile-menu-btn"
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              aria-label="Toggle navigation menu"
+            >
+              <Menu size={20} />
+            </button>
+            <div>
+              <p className="pa-kicker">Parashu command center</p>
+              <h1>{heading}</h1>
+            </div>
           </div>
           <div className="pa-topbar__meta">
             <span className="pa-pill pa-pill--neutral">
@@ -622,6 +835,7 @@ export default function Dashboard({ focus = "active" }) {
 
         {activeSection === "active" && renderActiveView()}
         {activeSection === "history" && renderHistoryView()}
+        {activeSection === "admins" && renderAdminsView()}
         {activeSection === "settings" && renderSettingsView()}
       </main>
 
@@ -679,6 +893,161 @@ export default function Dashboard({ focus = "active" }) {
                 disabled={clearingHistory}
               >
                 {clearingHistory ? "Deleting…" : "Confirm Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Admin Modal */}
+      {showAddAdminModal && (
+        <div className="ks-modal-overlay" onMouseDown={() => setShowAddAdminModal(false)}>
+          <div
+            className="ks-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Add New Administrator"
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <div className="ks-modal__head">
+              <span className="ks-modal__icon" style={{ background: "rgba(37, 99, 235, 0.16)", color: "#93c5fd" }}>
+                <UserPlus size={16} strokeWidth={2} />
+              </span>
+              <h2>Add New Administrator</h2>
+              <button
+                type="button"
+                className="ks-modal__close"
+                onClick={() => setShowAddAdminModal(false)}
+                aria-label="Close"
+              >
+                <X size={16} strokeWidth={2} />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddAdminSubmit}>
+              <div className="ks-modal__body">
+                <label className="ks-field">
+                  <span className="ks-field__label">Full Name</span>
+                  <input
+                    className="ks-input"
+                    type="text"
+                    placeholder="e.g. Sarah Connor"
+                    value={newAdminName}
+                    onChange={(e) => setNewAdminName(e.target.value)}
+                    required
+                  />
+                </label>
+
+                <label className="ks-field">
+                  <span className="ks-field__label">Email Address</span>
+                  <input
+                    className="ks-input"
+                    type="email"
+                    placeholder="admin@domain.com"
+                    value={newAdminEmail}
+                    onChange={(e) => setNewAdminEmail(e.target.value)}
+                    required
+                  />
+                </label>
+
+                <label className="ks-field">
+                  <span className="ks-field__label">Password</span>
+                  <input
+                    className="ks-input"
+                    type="password"
+                    placeholder="At least 6 characters"
+                    value={newAdminPassword}
+                    onChange={(e) => setNewAdminPassword(e.target.value)}
+                    required
+                    minLength={6}
+                  />
+                </label>
+
+                {addAdminError && (
+                  <p style={{ margin: 0, fontSize: 12.5, color: "#fca5a5", background: "rgba(220,38,38,0.15)", padding: "8px 10px", borderRadius: 6, border: "1px solid rgba(220,38,38,0.3)" }}>
+                    Error: {addAdminError}
+                  </p>
+                )}
+              </div>
+
+              <div className="ks-modal__foot">
+                <button
+                  type="button"
+                  className="ks-btn ks-btn--ghost"
+                  onClick={() => setShowAddAdminModal(false)}
+                  disabled={submittingAdmin}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="ks-btn ks-btn--danger"
+                  disabled={submittingAdmin}
+                >
+                  {submittingAdmin ? "Creating…" : "Create Administrator"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Remove Admin Modal */}
+      {showRemoveAdminModal && targetAdmin && (
+        <div className="ks-modal-overlay" onMouseDown={() => setShowRemoveAdminModal(false)}>
+          <div
+            className="ks-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Remove Administrator"
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <div className="ks-modal__head">
+              <span className="ks-modal__icon" style={{ background: "rgba(239, 68, 68, 0.15)", color: "#ef4444" }}>
+                <Trash2 size={16} strokeWidth={2} />
+              </span>
+              <h2>Remove Administrator</h2>
+              <button
+                type="button"
+                className="ks-modal__close"
+                onClick={() => setShowRemoveAdminModal(false)}
+                aria-label="Close"
+              >
+                <X size={16} strokeWidth={2} />
+              </button>
+            </div>
+
+            <div className="ks-modal__body">
+              <p style={{ margin: 0, fontSize: 13.5, color: "var(--text)" }}>
+                Are you sure you want to remove <strong>{targetAdmin.name}</strong> ({targetAdmin.email}) as an administrator?
+              </p>
+              <p style={{ margin: 0, fontSize: 12, color: "var(--muted)" }}>
+                This user will lose control room access immediately.
+              </p>
+
+              {removeAdminError && (
+                <p style={{ margin: "6px 0 0", fontSize: 12.5, color: "#fca5a5", background: "rgba(220,38,38,0.15)", padding: "8px 10px", borderRadius: 6, border: "1px solid rgba(220,38,38,0.3)" }}>
+                  Error: {removeAdminError}
+                </p>
+              )}
+            </div>
+
+            <div className="ks-modal__foot">
+              <button
+                type="button"
+                className="ks-btn ks-btn--ghost"
+                onClick={() => setShowRemoveAdminModal(false)}
+                disabled={removingAdmin}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="ks-btn ks-btn--danger"
+                onClick={handleConfirmRemoveAdmin}
+                disabled={removingAdmin}
+              >
+                {removingAdmin ? "Removing…" : "Confirm Remove"}
               </button>
             </div>
           </div>
