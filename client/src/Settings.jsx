@@ -14,7 +14,6 @@ import {
   CheckCircle2,
   XCircle,
 } from "lucide-react";
-import CommandShell from "./CommandShell";
 
 const CONTACTS = [
   { label: "Police / Emergency", number: "112" },
@@ -23,7 +22,51 @@ const CONTACTS = [
   { label: "Women Helpline", number: "1091" },
 ];
 
-export default function Settings() {
+function Group({ icon, tone = "info", title, children }) {
+  // Bound to a capitalised local so JSX can render it as a component.
+  const Icon = icon;
+
+  return (
+    <div className="pa-set__group">
+      <h3 className="pa-set__grouptitle">
+        <Icon size={16} strokeWidth={2} className={`pa-set__groupicon pa-set__groupicon--${tone}`} />
+        {title}
+      </h3>
+      <div className="pa-set__card">{children}</div>
+    </div>
+  );
+}
+
+function Row({ label, hint, children }) {
+  return (
+    <div className="pa-set__row">
+      <div className="pa-set__text">
+        <strong>{label}</strong>
+        <span>{hint}</span>
+      </div>
+      <div className="pa-set__control">{children}</div>
+    </div>
+  );
+}
+
+function Switch({ on, onChange, label }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      aria-label={label}
+      className={`pa-switch${on ? " is-on" : ""}`}
+      onClick={onChange}
+    />
+  );
+}
+
+/**
+ * Console settings, rendered inside the control-room shell alongside Active
+ * SOS, History and Admins rather than in a console of its own.
+ */
+export default function SettingsPanel() {
   const { user } = useAuth();
 
   // The same record the control room reads, so a toggle set here holds there.
@@ -56,167 +99,149 @@ export default function Settings() {
   }, []);
 
   const yesNo = (ok, yes, no) => (
-    <span className={`ks-chip ${ok ? "ks-chip--green" : "ks-chip--ghost"}`}>
-      {ok ? <CheckCircle2 size={12} strokeWidth={2} /> : <XCircle size={12} strokeWidth={2} />}
+    <span className={`pa-tag ${ok ? "pa-tag--ok" : "pa-tag--muted"}`}>
+      {ok ? <CheckCircle2 size={13} strokeWidth={2} /> : <XCircle size={13} strokeWidth={2} />}
       {ok ? yes : no}
     </span>
   );
 
   return (
-    <CommandShell title="Settings" syncLabel="Local" >
-
-      <div className="ks-settings">
-
-        <nav className="ks-settings__nav">
-          {[
-            { label: "General", icon: SettingsIcon },
-            { label: "Appearance", icon: Palette },
-            { label: "Notifications", icon: Bell },
-            { label: "Contacts", icon: Phone },
-            { label: "Voice", icon: Mic },
-            { label: "Location", icon: MapPin },
-            { label: "System", icon: Server },
-          ].map((section) => (
-            <a
-              className="ks-nav__item"
-              href={`#${section.label.toLowerCase()}`}
-              key={section.label}
-            >
-              <section.icon size={16} strokeWidth={1.8} />
-              <span>{section.label}</span>
-            </a>
-          ))}
-        </nav>
-
-        <div style={{ display: "grid", gap: 16 }}>
-
-          <div className="ks-card" id="general">
-            <div className="ks-card__head"><SettingsIcon size={15} strokeWidth={1.8} /><h2>General</h2></div>
-            <div className="ks-row">
-              <div className="ks-row__text"><strong>Signed in as</strong><span>{user?.email || "Google account"}</span></div>
-              <span className="ks-chip ks-chip--blue">{user?.name || "Unknown"}</span>
-            </div>
-            <div className="ks-row">
-              <div className="ks-row__text"><strong>Contact number</strong><span>Sent with every alert · change it on the Home screen</span></div>
-              <span className="ks-mono">{user?.phone || "—"}</span>
-            </div>
-            <div className="ks-row">
-              <div className="ks-row__text"><strong>Operator role</strong><span>Role assignment is not yet modelled</span></div>
-              <span className="ks-chip ks-chip--ghost ks-pending">not configured</span>
-            </div>
-          </div>
-
-          <div className="ks-card" id="appearance">
-            <div className="ks-card__head"><Palette size={15} strokeWidth={1.8} /><h2>Appearance</h2></div>
-            <div className="ks-row">
-              <div className="ks-row__text"><strong>Theme</strong><span>Dark is the only control-room theme</span></div>
-              <span className="ks-chip ks-chip--blue">Dark</span>
-            </div>
-            <div className="ks-row">
-              <div className="ks-row__text"><strong>Reduce motion</strong><span>Honours your system setting automatically</span></div>
-              <button
-                className={`ks-toggle${prefs.reduceMotion ? " is-on" : ""}`}
-                onClick={() => toggle("reduceMotion")}
-                aria-label="Reduce motion"
-              />
-            </div>
-          </div>
-
-          <div className="ks-card" id="notifications">
-            <div className="ks-card__head"><Bell size={15} strokeWidth={1.8} /><h2>Notifications</h2></div>
-            <div className="ks-row">
-              <div className="ks-row__text"><strong>Siren on new alert</strong><span>Plays in the control room when a new emergency arrives</span></div>
-              <button
-                className={`ks-toggle${prefs.sirenOnNewAlert ? " is-on" : ""}`}
-                onClick={() => toggle("sirenOnNewAlert")}
-                aria-label="Siren on new alert"
-              />
-            </div>
-            <div className="ks-row">
-              <div className="ks-row__text"><strong>Desktop notifications</strong><span>Requires browser permission and a service worker</span></div>
-              <button
-                className={`ks-toggle${prefs.desktopNotifications ? " is-on" : ""}`}
-                onClick={() => toggle("desktopNotifications")}
-                aria-label="Desktop notifications"
-              />
-            </div>
-          </div>
-
-          <div className="ks-card" id="contacts">
-            <div className="ks-card__head"><Phone size={15} strokeWidth={1.8} /><h2>Emergency Contacts</h2></div>
-            {CONTACTS.map((c) => (
-              <div className="ks-row" key={c.number}>
-                <div className="ks-row__text"><strong>{c.label}</strong><span>Dials directly from the device</span></div>
-                <a className="ks-btn ks-btn--ghost ks-btn--sm" href={`tel:${c.number}`}>{c.number}</a>
-              </div>
-            ))}
-          </div>
-
-          <div className="ks-card" id="voice">
-            <div className="ks-card__head"><Mic size={15} strokeWidth={1.8} /><h2>Voice Recognition</h2></div>
-            <div className="ks-row">
-              <div className="ks-row__text"><strong>Browser support</strong><span>Web Speech API availability</span></div>
-              {yesNo(voiceSupported, "Supported", "Not supported")}
-            </div>
-            <div className="ks-row">
-              <div className="ks-row__text"><strong>Trigger phrases</strong><span>Matched against continuous transcription</span></div>
-              <span className="ks-mono">“help me” · “sos”</span>
-            </div>
-          </div>
-
-          <div className="ks-card" id="location">
-            <div className="ks-card__head"><MapPin size={15} strokeWidth={1.8} /><h2>Location Tracking</h2></div>
-            <div className="ks-row">
-              <div className="ks-row__text"><strong>Geolocation permission</strong><span>Reported by the browser</span></div>
-              <span className={`ks-chip ${geoState === "granted" ? "ks-chip--green" : geoState === "denied" ? "ks-chip--red" : "ks-chip--ghost"}`}>
-                {geoState}
-              </span>
-            </div>
-            <div className="ks-row">
-              <div className="ks-row__text"><strong>Ping interval</strong><span>While an SOS is active</span></div>
-              <span className="ks-mono">5s</span>
-            </div>
-            <div className="ks-row">
-              <div className="ks-row__text"><strong>Status poll</strong><span>Checks whether authorities closed the case</span></div>
-              <span className="ks-mono">3s</span>
-            </div>
-          </div>
-
-          <div className="ks-card" id="system">
-            <div className="ks-card__head"><Server size={15} strokeWidth={1.8} /><h2>API &amp; System</h2></div>
-            <div className="ks-row">
-              <div className="ks-row__text"><strong>Backend</strong><span>{API_BASE.replace(/^https?:\/\//, "")}</span></div>
-              {yesNo(apiStatus === "online", "Online", apiStatus === "checking" ? "Checking" : "Unreachable")}
-            </div>
-            <div className="ks-row">
-              <div className="ks-row__text"><strong>Database</strong><span>Supabase PostgreSQL</span></div>
-              <span className="ks-chip ks-chip--ghost">via backend</span>
-            </div>
-            <div className="ks-row">
-              <div className="ks-row__text"><strong>Alert feed</strong><span>Server sent events from /alerts/stream</span></div>
-              <span className="ks-mono">realtime</span>
-            </div>
-          </div>
-
-          <div className="ks-card">
-            <div className="ks-card__head"><Info size={15} strokeWidth={1.8} /><h2>About Parashu</h2></div>
-            <div className="ks-card__body" style={{ fontSize: 13, color: "var(--muted)", display: "grid", gap: 6 }}>
-              <div className="ks-list__row" style={{ padding: "6px 0" }}>
-                <span>Voice activated emergency response platform</span>
-              </div>
-              <div className="ks-list__row" style={{ padding: "6px 0" }}>
-                <span>Build</span><b>React · Vite · Express · Supabase</b>
-              </div>
-              <div className="ks-list__row" style={{ padding: "6px 0", borderBottom: "none" }}>
-                <span>Team</span><b>SpringX</b>
-              </div>
-            </div>
-          </div>
-
+    <section className="pa-set">
+      <div className="pa-set__head">
+        <div>
+          <p className="pa-kicker">Console preferences</p>
+          <h2>Settings</h2>
         </div>
-
+        <span className="pa-tag pa-tag--muted">Saved on this device</span>
       </div>
 
-    </CommandShell>
+      <Group icon={SettingsIcon} title="General">
+        <Row label="Signed in as" hint={user?.email || "Google account"}>
+          <span className="pa-tag pa-tag--info">{user?.name || "Unknown"}</span>
+        </Row>
+        <Row label="Contact number" hint="Sent with every alert · change it on the Home screen">
+          <span className="pa-mono">{user?.phone || "—"}</span>
+        </Row>
+        <Row label="Operator role" hint="Role assignment is not yet modelled">
+          <span className="pa-tag pa-tag--muted">Not configured</span>
+        </Row>
+      </Group>
+
+      <Group icon={Palette} title="Appearance">
+        <Row label="Theme" hint="Dark is the only control-room theme">
+          <span className="pa-tag pa-tag--info">Dark</span>
+        </Row>
+        <Row label="Reduce motion" hint="Honours your system setting automatically">
+          <Switch
+            on={prefs.reduceMotion}
+            onChange={() => toggle("reduceMotion")}
+            label="Reduce motion"
+          />
+        </Row>
+      </Group>
+
+      <Group icon={Bell} tone="warn" title="Notifications">
+        <Row
+          label="Siren on new alert"
+          hint="Plays in the control room when a new emergency arrives"
+        >
+          <Switch
+            on={prefs.sirenOnNewAlert}
+            onChange={() => toggle("sirenOnNewAlert")}
+            label="Siren on new alert"
+          />
+        </Row>
+        <Row
+          label="Desktop notifications"
+          hint="Requires browser permission and a service worker"
+        >
+          <Switch
+            on={prefs.desktopNotifications}
+            onChange={() => toggle("desktopNotifications")}
+            label="Desktop notifications"
+          />
+        </Row>
+        <Row label="Realtime alert stream" hint="Server sent events from /alerts/stream">
+          <Switch
+            on={prefs.realtime}
+            onChange={() => toggle("realtime")}
+            label="Realtime alert stream"
+          />
+        </Row>
+      </Group>
+
+      <Group icon={Phone} tone="danger" title="Emergency Contacts">
+        {CONTACTS.map((contact) => (
+          <Row
+            key={contact.number}
+            label={contact.label}
+            hint="Dials directly from the device"
+          >
+            <a className="pa-set__dial" href={`tel:${contact.number}`}>
+              {contact.number}
+            </a>
+          </Row>
+        ))}
+      </Group>
+
+      <Group icon={Mic} title="Voice Recognition">
+        <Row label="Browser support" hint="Web Speech API availability">
+          {yesNo(voiceSupported, "Supported", "Not supported")}
+        </Row>
+        <Row label="Trigger phrases" hint="Matched against continuous transcription">
+          <span className="pa-mono">“help me” · “sos”</span>
+        </Row>
+      </Group>
+
+      <Group icon={MapPin} title="Location Tracking">
+        <Row label="Geolocation permission" hint="Reported by the browser">
+          <span
+            className={`pa-tag ${
+              geoState === "granted"
+                ? "pa-tag--ok"
+                : geoState === "denied"
+                ? "pa-tag--danger"
+                : "pa-tag--muted"
+            }`}
+          >
+            {geoState}
+          </span>
+        </Row>
+        <Row label="Ping interval" hint="While an SOS is active">
+          <span className="pa-mono">5s</span>
+        </Row>
+        <Row label="Status poll" hint="Checks whether authorities closed the case">
+          <span className="pa-mono">3s</span>
+        </Row>
+      </Group>
+
+      <Group icon={Server} title="API & System">
+        <Row label="Backend" hint={API_BASE.replace(/^https?:\/\//, "")}>
+          {yesNo(
+            apiStatus === "online",
+            "Online",
+            apiStatus === "checking" ? "Checking" : "Unreachable"
+          )}
+        </Row>
+        <Row label="Database" hint="Supabase PostgreSQL">
+          <span className="pa-tag pa-tag--muted">via backend</span>
+        </Row>
+        <Row label="Alert feed" hint="Server sent events from /alerts/stream">
+          <span className="pa-mono">realtime</span>
+        </Row>
+      </Group>
+
+      <Group icon={Info} title="About Parashu">
+        <Row label="Platform" hint="Voice activated emergency response">
+          <span className="pa-tag pa-tag--muted">Control room</span>
+        </Row>
+        <Row label="Build" hint="React · Vite · Express · Supabase">
+          <span className="pa-mono">web</span>
+        </Row>
+        <Row label="Team" hint="Built and maintained by">
+          <span className="pa-tag pa-tag--info">SpringX</span>
+        </Row>
+      </Group>
+    </section>
   );
 }

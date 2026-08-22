@@ -3259,6 +3259,10 @@ a { color: inherit; }
   color: var(--text);
 }
 
+.pa-adm__groupicon {
+  flex: none;
+}
+
 .pa-adm__groupicon--warn {
   color: var(--warning);
 }
@@ -3484,5 +3488,342 @@ a { color: inherit; }
     width: 100%;
     margin-left: 0;
     justify-content: flex-start;
+  }
+}
+
+/* ==========================================================================
+   Console settings — same rhythm as the admin portal
+   ========================================================================== */
+
+.pa-set {
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+}
+
+.pa-set__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.pa-set__head h2 {
+  margin: 4px 0 0;
+  font-size: 21px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+}
+
+.pa-set__group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.pa-set__grouptitle {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.pa-set__groupicon {
+  flex: none;
+}
+
+.pa-set__groupicon--info { color: #60a5fa; }
+.pa-set__groupicon--warn { color: var(--warning); }
+.pa-set__groupicon--danger { color: #f87171; }
+
+.pa-set__card {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(15, 23, 42, 0.55);
+  overflow: hidden;
+}
+
+.pa-set__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 18px;
+  border-top: 1px solid var(--line);
+}
+
+.pa-set__row:first-child {
+  border-top: none;
+}
+
+.pa-set__text {
+  min-width: 0;
+}
+
+.pa-set__text strong {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.pa-set__text span {
+  display: block;
+  margin-top: 3px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.pa-set__control {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pa-set__dial {
+  padding: 7px 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.08);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 13px;
+  text-decoration: none;
+  transition: background 0.18s ease, border-color 0.18s ease;
+}
+
+.pa-set__dial:hover {
+  border-color: rgba(37, 99, 235, 0.4);
+  background: rgba(37, 99, 235, 0.16);
+}
+
+/* Self-contained switch: the knob is a pseudo-element, so the control needs
+   no child markup and stays a single focusable button. */
+.pa-switch {
+  position: relative;
+  width: 40px;
+  height: 23px;
+  flex: none;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.18);
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.pa-switch::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  background: #e2e8f0;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.pa-switch.is-on {
+  background: rgba(37, 99, 235, 0.85);
+  border-color: rgba(37, 99, 235, 0.6);
+}
+
+.pa-switch.is-on::after {
+  transform: translateX(17px);
+  background: #fff;
+}
+
+/* Small status label shared by the settings rows. */
+.pa-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.1);
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.pa-tag--muted {
+  color: var(--muted);
+}
+
+.pa-tag--info {
+  border-color: rgba(37, 99, 235, 0.36);
+  background: rgba(37, 99, 235, 0.14);
+  color: #93c5fd;
+}
+
+.pa-tag--ok {
+  border-color: rgba(22, 163, 74, 0.36);
+  background: rgba(22, 163, 74, 0.14);
+  color: #86efac;
+}
+
+.pa-tag--danger {
+  border-color: rgba(239, 68, 68, 0.34);
+  background: rgba(239, 68, 68, 0.13);
+  color: #fca5a5;
+}
+
+/* ==========================================================================
+   Buttons, meta lines and dialogs used across the control room
+   ========================================================================== */
+
+.pa-btn--primary {
+  border-color: rgba(37, 99, 235, 0.5);
+  background: rgba(37, 99, 235, 0.9);
+  color: #fff;
+  font-weight: 600;
+}
+
+.pa-btn--primary:hover {
+  background: #2563eb;
+}
+
+.pa-btn--danger {
+  border-color: rgba(239, 68, 68, 0.34);
+  background: rgba(239, 68, 68, 0.14);
+  color: #fca5a5;
+}
+
+.pa-btn--danger:hover {
+  border-color: rgba(239, 68, 68, 0.5);
+  background: rgba(239, 68, 68, 0.24);
+}
+
+.pa-btn--sm {
+  padding: 7px 10px;
+  font-size: 12.5px;
+}
+
+.pa-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.pa-meta-line {
+  display: block;
+  margin-top: 3px;
+  font-size: 11.5px;
+  color: var(--faint);
+}
+
+.pa-pill--resolved {
+  border-color: rgba(22, 163, 74, 0.26);
+  background: rgba(22, 163, 74, 0.12);
+  color: #86efac;
+}
+
+.pa-map-card {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  overflow: hidden;
+  background: rgba(2, 6, 23, 0.6);
+}
+
+.pa-map-card--empty {
+  display: grid;
+  place-items: center;
+  min-height: 160px;
+  padding: 20px;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+.pa-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(2, 6, 23, 0.78);
+  backdrop-filter: blur(6px);
+  overflow-y: auto;
+}
+
+.pa-modal {
+  width: 100%;
+  max-width: 480px;
+  padding: 22px;
+  border: 1px solid var(--line-strong);
+  border-radius: 20px;
+  background: linear-gradient(160deg, #131c2e 0%, #0b1220 100%);
+  box-shadow: var(--shadow-lg);
+}
+
+.pa-modal--danger {
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+.pa-modal--invite {
+  border-color: rgba(56, 189, 248, 0.28);
+}
+
+.pa-modal__head {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  margin-bottom: 14px;
+}
+
+.pa-modal__head h3 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.pa-modal__icon--danger {
+  flex: none;
+  color: #f87171;
+}
+
+.pa-modal__body {
+  font-size: 13.5px;
+  color: var(--text-2);
+}
+
+.pa-modal__body p {
+  margin: 0;
+}
+
+.pa-modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+@media (max-width: 760px) {
+  .pa-set__head {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .pa-set__row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .pa-modal__actions {
+    justify-content: stretch;
+  }
+
+  .pa-modal__actions .pa-btn {
+    flex: 1 1 120px;
   }
 }

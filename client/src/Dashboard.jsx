@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import QRCode from "qrcode";
 import { useAuth } from "./lib/authContext";
 import {
@@ -25,6 +24,7 @@ import {
   osmLinkUrl,
 } from "./lib/alerts";
 import { usePrefs } from "./lib/prefs";
+import SettingsPanel from "./Settings";
 import {
   AlertTriangle,
   BellRing,
@@ -37,17 +37,13 @@ import {
   History,
   LogOut,
   MapPin,
-  Menu,
-  Plus,
   QrCode,
-  RotateCcw,
   Search,
   Settings as SettingsIcon,
   Share2,
   ShieldAlert,
   ShieldCheck,
   Trash2,
-  UserPlus,
   UserRound,
   Volume2,
   X,
@@ -73,6 +69,7 @@ const PAGE_TITLES = {
   active: "Active SOS",
   history: "History",
   admins: "Admins",
+  settings: "Settings",
 };
 
 function getDistanceKm(lat1, lon1, lat2, lon2) {
@@ -257,7 +254,6 @@ function LiveMap({ alert }) {
 
 export default function Dashboard({ focus = "active" }) {
   const { user, signOut } = useAuth();
-  const navigate = useNavigate();
   const { prefs, togglePref } = usePrefs();
 
   const [activeAlerts, setActiveAlerts] = useState([]);
@@ -1098,8 +1094,8 @@ export default function Dashboard({ focus = "active" }) {
 
           <button
             type="button"
-            className="pa-nav-item"
-            onClick={() => navigate("/settings")}
+            className={`pa-nav-item${tab === "settings" ? " is-active" : ""}`}
+            onClick={() => setTab("settings")}
           >
             <SettingsIcon size={17} strokeWidth={1.9} />
             <span>Settings</span>
@@ -1158,6 +1154,7 @@ export default function Dashboard({ focus = "active" }) {
           {tab === "active" && renderActiveView()}
           {tab === "history" && renderHistoryView()}
           {tab === "admins" && renderAdminsView()}
+          {tab === "settings" && <SettingsPanel />}
         </div>
       </main>
 

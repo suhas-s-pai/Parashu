@@ -7,7 +7,6 @@ import AdminInvitePage from "./AdminInvitePage";
 import MapGrid from "./MapGrid";
 import Insights from "./Insights";
 import Reports from "./Reports";
-import Settings from "./Settings";
 import { useAuth } from "./lib/authContext";
 import { configProblem } from "./lib/supabaseClient";
 
@@ -173,7 +172,7 @@ export default function App() {
         path="/settings"
         element={
           <RequireAdmin>
-            <Settings />
+            <Dashboard focus="settings" />
           </RequireAdmin>
         }
       />
