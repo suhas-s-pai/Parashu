@@ -1735,9 +1735,9 @@ a { color: inherit; }
   height: 32px;
   border-radius: 50%;
   overflow: hidden;
-  background: rgba(15, 23, 42, 0.85);
-  border: 1px solid rgba(220, 38, 38, 0.35);
-  box-shadow: 0 0 10px rgba(220, 38, 38, 0.35);
+  background: rgba(10, 16, 28, 0.85);
+  border: 1px solid rgba(0, 102, 255, 0.4);
+  box-shadow: 0 0 12px rgba(0, 102, 255, 0.35);
   flex: none;
 }
 
@@ -1750,84 +1750,83 @@ a { color: inherit; }
 .pa-landing-logo-circle {
   display: inline-grid;
   place-items: center;
-  width: 72px;
-  height: 72px;
+  width: 84px;
+  height: 84px;
   border-radius: 50%;
-  overflow: hidden;
-  background: rgba(15, 23, 42, 0.85);
-  border: 1.5px solid rgba(220, 38, 38, 0.45);
-  box-shadow: 0 0 22px rgba(220, 38, 38, 0.5), inset 0 0 12px rgba(220, 38, 38, 0.2);
-  margin-bottom: 16px;
+  padding: 2.5px;
+  background: linear-gradient(135deg, #0088ff 0%, #ff0044 100%);
+  box-shadow: 0 0 28px rgba(0, 136, 255, 0.5), 0 0 28px rgba(255, 0, 68, 0.5);
+  margin-bottom: 20px;
   position: relative;
   z-index: 1;
   animation: paPulseLogo 4s ease-in-out infinite alternate;
 }
 
 .pa-landing-logo-circle img {
-  width: 80%;
-  height: 80%;
-  object-fit: contain;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
 }
 
 @keyframes paPulseLogo {
-  0% { transform: scale(1); box-shadow: 0 0 16px rgba(220, 38, 38, 0.4), inset 0 0 10px rgba(220, 38, 38, 0.2); }
-  100% { transform: scale(1.04); box-shadow: 0 0 28px rgba(220, 38, 38, 0.65), inset 0 0 16px rgba(220, 38, 38, 0.3); }
+  0% { transform: scale(1); box-shadow: 0 0 22px rgba(0, 136, 255, 0.45), 0 0 22px rgba(255, 0, 68, 0.45); }
+  100% { transform: scale(1.04); box-shadow: 0 0 34px rgba(0, 136, 255, 0.65), 0 0 34px rgba(255, 0, 68, 0.65); }
 }
 
 /* ==========================================================================
-   Emergency Response Radar System (Deep Blue & Orange/Red Accents)
+   Emergency Response Radar System (Matching Reference Image)
    ========================================================================== */
 
 .pa-neon-radar-system {
   position: fixed;
   top: 50%;
   left: 50%;
-  width: min(640px, 94vw);
-  height: min(640px, 94vw);
+  width: min(680px, 96vw);
+  height: min(680px, 96vw);
   transform: translate(-50%, -50%);
   pointer-events: none;
   z-index: 0;
   overflow: visible;
 }
 
-/* Ambient Deep Blue & Emergency Red Halos */
+/* Ambient Electric Blue & Neon Red Glow Halos */
 .pa-neon-glow {
   position: absolute;
   border-radius: 50%;
   pointer-events: none;
-  filter: blur(90px);
+  filter: blur(100px);
 }
 
 .pa-neon-glow--blue {
-  top: 10%;
-  left: 10%;
-  width: 75%;
-  height: 75%;
-  background: rgba(37, 99, 235, 0.22);
+  top: 15%;
+  left: 5%;
+  width: 65%;
+  height: 65%;
+  background: rgba(0, 102, 255, 0.28);
   animation: paGlowPulse 10s ease-in-out infinite alternate;
 }
 
-.pa-neon-glow--orange {
-  bottom: 12%;
-  right: 12%;
-  width: 50%;
-  height: 50%;
-  background: rgba(249, 115, 22, 0.15);
+.pa-neon-glow--red {
+  bottom: 15%;
+  right: 5%;
+  width: 60%;
+  height: 60%;
+  background: rgba(255, 0, 51, 0.25);
   animation: paGlowPulse 12s ease-in-out infinite alternate-reverse;
 }
 
 @keyframes paGlowPulse {
-  0% { transform: scale(0.92); opacity: 0.5; }
-  100% { transform: scale(1.08); opacity: 0.8; }
+  0% { transform: scale(0.92); opacity: 0.55; }
+  100% { transform: scale(1.08); opacity: 0.85; }
 }
 
-/* SVG Radar Rings */
+/* SVG Radar Elements */
 .pa-radar-svg {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
-  filter: drop-shadow(0 0 10px rgba(37, 99, 235, 0.35));
 }
 
 .pa-radar-group {
@@ -1835,15 +1834,11 @@ a { color: inherit; }
 }
 
 .pa-radar-rotate-cw {
-  animation: paRotateCW 42s linear infinite;
+  animation: paRotateCW 40s linear infinite;
 }
 
 .pa-radar-rotate-ccw {
-  animation: paRotateCCW 32s linear infinite;
-}
-
-.pa-radar-rotate-cw-slow {
-  animation: paRotateCW 55s linear infinite;
+  animation: paRotateCCW 30s linear infinite;
 }
 
 @keyframes paRotateCW {
@@ -1854,24 +1849,28 @@ a { color: inherit; }
   to { transform: rotate(-360deg); }
 }
 
-.pa-ring-glow-orange {
-  filter: drop-shadow(0 0 8px rgba(255, 123, 0, 0.85)) drop-shadow(0 0 16px rgba(249, 115, 22, 0.6));
+.pa-blue-arc-glow {
+  filter: drop-shadow(0 0 12px rgba(0, 200, 255, 0.9));
 }
 
-.pa-particle-glow-orange {
-  filter: drop-shadow(0 0 8px #ff7b00);
+.pa-red-arc-glow {
+  filter: drop-shadow(0 0 12px rgba(255, 0, 51, 0.9));
+}
+
+.pa-particle-glow-red {
+  filter: drop-shadow(0 0 8px #ff0033);
 }
 
 .pa-particle-glow-blue {
-  filter: drop-shadow(0 0 6px #60a5fa);
+  filter: drop-shadow(0 0 8px #00c8ff);
 }
 
-/* Subtle Slow Rotating Radar Sweep Beam */
+/* Rotating Radar Wedge Sweep Beam */
 .pa-radar-sweep-container {
   position: absolute;
   inset: 0;
   border-radius: 50%;
-  animation: paRotateCW 12s linear infinite;
+  animation: paRotateCW 8s linear infinite;
   pointer-events: none;
 }
 
@@ -1881,24 +1880,23 @@ a { color: inherit; }
   border-radius: 50%;
   background: conic-gradient(
     from 0deg,
-    rgba(59, 130, 246, 0.28) 0deg,
-    rgba(37, 99, 235, 0.18) 25deg,
-    rgba(249, 115, 22, 0.14) 45deg,
-    rgba(239, 68, 68, 0.08) 60deg,
-    transparent 75deg,
+    rgba(255, 0, 51, 0.45) 0deg,
+    rgba(255, 51, 85, 0.3) 25deg,
+    rgba(255, 102, 0, 0.15) 45deg,
+    transparent 65deg,
     transparent 360deg
   );
   mask-image: radial-gradient(circle, transparent 20%, #000 75%, transparent 100%);
   -webkit-mask-image: radial-gradient(circle, transparent 20%, #000 75%, transparent 100%);
-  filter: drop-shadow(0 0 12px rgba(37, 99, 235, 0.3));
+  filter: drop-shadow(0 0 16px rgba(255, 0, 51, 0.6));
 }
 
 /* Center Darkener to keep Login Card 100% Readable */
 .pa-radar-center-darkener {
   position: absolute;
-  inset: 15%;
+  inset: 16%;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(7, 13, 26, 0.88) 0%, rgba(7, 13, 26, 0.5) 65%, transparent 100%);
+  background: radial-gradient(circle, rgba(6, 11, 20, 0.9) 0%, rgba(6, 11, 20, 0.5) 65%, transparent 100%);
   pointer-events: none;
 }
 
@@ -1918,13 +1916,14 @@ a { color: inherit; }
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 24px;
-  padding: 8px 16px;
+  margin-bottom: 22px;
+  padding: 7px 16px;
   border-radius: 999px;
-  background: rgba(15, 23, 42, 0.7);
-  border: 1px solid var(--line);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  background: rgba(10, 16, 28, 0.85);
+  border: 1px solid rgba(0, 102, 255, 0.35);
+  box-shadow: 0 0 20px rgba(0, 102, 255, 0.2), inset 0 0 10px rgba(0, 102, 255, 0.1);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
 .pa-auth__brand-text {
@@ -1933,16 +1932,16 @@ a { color: inherit; }
 }
 
 .pa-auth__wordmark {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 800;
   letter-spacing: 0.08em;
   line-height: 1.1;
-  color: #f8fafc;
+  color: #ffffff;
 }
 
 .pa-auth__subwordmark {
   font-size: 10px;
-  color: var(--muted);
+  color: #94a3b8;
   letter-spacing: 0.03em;
 }
 
@@ -1950,14 +1949,14 @@ a { color: inherit; }
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  margin-left: 8px;
-  padding: 4px 10px;
+  margin-left: 6px;
+  padding: 3.5px 10px;
   border-radius: 999px;
   font-size: 11px;
   font-weight: 600;
-  color: #86efac;
-  background: rgba(22, 163, 74, 0.14);
-  border: 1px solid rgba(22, 163, 74, 0.28);
+  color: #4ade80;
+  background: rgba(22, 163, 74, 0.18);
+  border: 1px solid rgba(34, 197, 94, 0.35);
 }
 
 /* Step Container Animations */
@@ -1974,16 +1973,16 @@ a { color: inherit; }
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* Landing Step */
+/* Glassmorphism Landing Card Matching Reference Image */
 .pa-auth__step--landing {
   text-align: center;
-  padding: 32px 24px 28px;
-  border-radius: var(--r-xl);
-  background: var(--surface);
-  border: 1px solid var(--line-strong);
-  box-shadow: var(--shadow-lg);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  padding: 38px 28px 34px;
+  border-radius: 24px;
+  background: rgba(10, 16, 28, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: -12px 0 35px rgba(0, 102, 255, 0.28), 12px 0 35px rgba(255, 0, 51, 0.28);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1991,61 +1990,52 @@ a { color: inherit; }
 
 .pa-auth__headline {
   margin: 0 0 6px;
-  font-size: 24px;
+  font-size: 28px;
   font-weight: 800;
-  letter-spacing: 0.06em;
-  color: #f8fafc;
+  letter-spacing: 0.08em;
+  color: #ffffff;
 }
 
 .pa-auth__tagline {
-  margin: 0 0 14px;
+  margin: 0 0 24px;
   font-size: 13.5px;
   line-height: 1.5;
-  color: var(--muted);
+  color: #94a3b8;
 }
 
 .pa-auth__accent-line {
   display: block;
-  width: 48px;
-  height: 2px;
-  border-radius: 2px;
-  background: linear-gradient(90deg, #ef4444, #3b82f6);
-  margin: 0 auto 12px;
-  opacity: 0.8;
+  width: 44px;
+  height: 3px;
+  border-radius: 3px;
+  background: linear-gradient(90deg, #0088ff, #ff0044);
+  margin: 0 auto 14px;
 }
 
-.pa-auth__motto {
-  margin: 0 0 24px;
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: #94a3b8;
-}
-
+/* Vibrant Red CTA Button Matching Reference Image */
 .pa-landing-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  width: min(280px, 82%);
-  height: 46px;
-  padding: 0 20px;
+  gap: 10px;
+  width: min(300px, 86%);
+  height: 48px;
+  padding: 0 24px;
   border-radius: 999px;
-  border: 1px solid rgba(239, 68, 68, 0.45);
-  background: linear-gradient(135deg, #ef4444, #dc2626);
+  border: 1px solid rgba(255, 51, 85, 0.5);
+  background: linear-gradient(135deg, #ff0033 0%, #dc0026 100%);
   color: #ffffff;
-  font-size: 14.5px;
-  font-weight: 600;
+  font-size: 15px;
+  font-weight: 700;
   cursor: pointer;
-  box-shadow: 0 6px 20px rgba(239, 68, 68, 0.35);
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 8px 25px rgba(255, 0, 51, 0.45);
+  transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .pa-landing-btn:hover {
   transform: translateY(-1px);
-  box-shadow: 0 10px 24px rgba(239, 68, 68, 0.48);
-  filter: brightness(1.06);
+  box-shadow: 0 12px 30px rgba(255, 0, 51, 0.6);
+  filter: brightness(1.08);
 }
 
 .pa-landing-btn:active {

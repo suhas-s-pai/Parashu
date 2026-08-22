@@ -24,15 +24,15 @@ function GoogleMark() {
   );
 }
 
-// Professional Emergency Response Radar Background (Deep Blue & Orange/Red Accents)
+// Professional Emergency Response Radar Background (Matching Reference Image)
 function NeonRadarBackground() {
   return (
     <div className="pa-neon-radar-system" aria-hidden="true">
-      {/* Soft Ambient Deep Blue & Emergency Red Halos */}
+      {/* Soft Ambient Electric Blue & Neon Red Halos */}
       <div className="pa-neon-glow pa-neon-glow--blue" />
-      <div className="pa-neon-glow pa-neon-glow--orange" />
+      <div className="pa-neon-glow pa-neon-glow--red" />
 
-      {/* SVG Thin Concentric Emergency Radar Rings with Rotating Neon Dark Orange Arc */}
+      {/* SVG Radar Rings */}
       <svg
         className="pa-radar-svg"
         viewBox="0 0 600 600"
@@ -40,67 +40,57 @@ function NeonRadarBackground() {
         xmlns="http://www.w3.org/2000/svg"
       >
         <defs>
-          {/* Vibrant Neon Dark Orange Gradient */}
-          <linearGradient id="neonOrangeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#ff7b00" stopOpacity="0.95" />
-            <stop offset="50%" stopColor="#f97316" stopOpacity="0.9" />
-            <stop offset="100%" stopColor="#ea580c" stopOpacity="0.95" />
+          <linearGradient id="blueArcGrad" x1="0%" y1="100%" x2="0%" y2="0%">
+            <stop offset="0%" stopColor="#0066ff" stopOpacity="0.9" />
+            <stop offset="60%" stopColor="#00c8ff" stopOpacity="0.85" />
+            <stop offset="100%" stopColor="#00f0ff" stopOpacity="0.95" />
           </linearGradient>
 
-          <linearGradient id="emergencyGrad1" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.85" />
-            <stop offset="60%" stopColor="#2563eb" stopOpacity="0.6" />
-            <stop offset="100%" stopColor="#ff6b00" stopOpacity="0.95" />
+          <linearGradient id="redSweepGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#ff0033" stopOpacity="0.95" />
+            <stop offset="50%" stopColor="#ff3355" stopOpacity="0.85" />
+            <stop offset="100%" stopColor="#ff6600" stopOpacity="0.95" />
           </linearGradient>
         </defs>
 
-        {/* 1. Outer Ring Group with Rotating Neon Dark Orange Arc */}
+        {/* 1. Outer Ring Group with Left Blue Arc & Right Red Arc */}
         <g className="pa-radar-group pa-radar-rotate-cw">
-          <circle cx="300" cy="300" r="275" stroke="#2563eb" strokeWidth="1" strokeOpacity="0.35" />
-          {/* Vibrant Rotating Neon Dark Orange Ring Arc */}
-          <circle
-            cx="300"
-            cy="300"
-            r="275"
-            stroke="url(#neonOrangeGrad)"
+          {/* Base Thin Ring */}
+          <circle cx="300" cy="300" r="275" stroke="#0044aa" strokeWidth="1" strokeOpacity="0.3" />
+          {/* Left Electric Blue Arc */}
+          <path
+            d="M 300 25 A 275 275 0 0 0 300 575"
+            stroke="url(#blueArcGrad)"
             strokeWidth="2.4"
-            strokeDasharray="95 185"
-            strokeOpacity="0.95"
-            className="pa-ring-glow-orange"
+            strokeLinecap="round"
+            className="pa-blue-arc-glow"
           />
-          <circle cx="575" cy="300" r="4.5" fill="#ff7b00" className="pa-particle-glow-orange" />
+          {/* Right Neon Red Arc */}
+          <path
+            d="M 300 25 A 275 275 0 0 1 575 300"
+            stroke="url(#redSweepGrad)"
+            strokeWidth="2.4"
+            strokeLinecap="round"
+            className="pa-red-arc-glow"
+          />
+          {/* Bright Orbiting Particles */}
+          <circle cx="106" cy="469" r="4.5" fill="#00d9ff" className="pa-particle-glow-blue" />
+          <circle cx="494" cy="106" r="4.5" fill="#ff0044" className="pa-particle-glow-red" />
         </g>
 
-        {/* 2. Middle Ring Group */}
+        {/* 2. Concentric Inner Rings */}
         <g className="pa-radar-group pa-radar-rotate-ccw">
-          <circle cx="300" cy="300" r="225" stroke="#3b82f6" strokeWidth="1" strokeOpacity="0.28" />
-          <circle
-            cx="300"
-            cy="300"
-            r="225"
-            stroke="url(#neonOrangeGrad)"
-            strokeWidth="2"
-            strokeDasharray="65 155"
-            strokeOpacity="0.9"
-            className="pa-ring-glow-orange"
-          />
-          <circle cx="300" cy="75" r="3.5" fill="#60a5fa" className="pa-particle-glow-blue" />
+          <circle cx="300" cy="300" r="225" stroke="#0055ff" strokeWidth="0.8" strokeDasharray="3 15" strokeOpacity="0.4" />
+          <circle cx="300" cy="300" r="175" stroke="#ff0044" strokeWidth="0.8" strokeDasharray="4 20" strokeOpacity="0.35" />
+          <circle cx="425" cy="425" r="3.5" fill="#ff3355" className="pa-particle-glow-red" />
         </g>
 
-        {/* 3. Inner Ring Group */}
-        <g className="pa-radar-group pa-radar-rotate-cw-slow">
-          <circle cx="300" cy="300" r="175" stroke="#2563eb" strokeWidth="1" strokeOpacity="0.3" />
-          <circle cx="300" cy="300" r="175" stroke="url(#neonOrangeGrad)" strokeWidth="1.8" strokeDasharray="45 175" strokeOpacity="0.85" className="pa-ring-glow-orange" />
-          <circle cx="300" cy="300" r="125" stroke="#3b82f6" strokeWidth="1" strokeOpacity="0.2" />
-          <circle cx="425" cy="300" r="3.5" fill="#ff7b00" className="pa-particle-glow-orange" />
-        </g>
-
-        {/* Minimal Crosshair Axes Lines */}
-        <line x1="300" y1="20" x2="300" y2="580" stroke="#3b82f6" strokeWidth="0.8" strokeOpacity="0.2" strokeDasharray="4 8" />
-        <line x1="20" y1="300" x2="580" y2="300" stroke="#3b82f6" strokeWidth="0.8" strokeOpacity="0.2" strokeDasharray="4 8" />
+        {/* Fine Radial Ticks */}
+        <line x1="300" y1="15" x2="300" y2="585" stroke="#0066ff" strokeWidth="0.8" strokeOpacity="0.15" strokeDasharray="4 6" />
+        <line x1="15" y1="300" x2="585" y2="300" stroke="#0066ff" strokeWidth="0.8" strokeOpacity="0.15" strokeDasharray="4 6" />
       </svg>
 
-      {/* Subtle Slow Rotating Radar Sweep Beam */}
+      {/* Rotating Neon Red Scanner Beam (Wedge) */}
       <div className="pa-radar-sweep-container">
         <div className="pa-radar-sweep-beam" />
       </div>
@@ -187,11 +177,11 @@ export default function Login() {
 
   return (
     <div className="pa-auth-page">
-      {/* Emergency Response Radar Background (Deep Blue + Orange/Red Accents) */}
+      {/* Emergency Response Radar Background (Matching Reference Image) */}
       <NeonRadarBackground />
 
       <div className="pa-auth-container">
-        {/* Top Brand Header */}
+        {/* Top Brand Header (Matching Reference Image Pill) */}
         <div className="pa-auth__brand-header">
           <div className="pa-logo-circle">
             <img src="/symbol.png" alt="Parashu Logo" />
@@ -208,31 +198,25 @@ export default function Login() {
         {/* STEP 0: LANDING */}
         {step === "landing" && (
           <div className="pa-auth__step pa-auth__step--landing">
-            {/* Perfectly Circular Logo Container */}
+            {/* Circular Logo Container with Dual Blue/Red Glow Border */}
             <div className="pa-landing-logo-circle">
               <img src="/symbol.png" alt="Parashu Symbol" />
             </div>
 
             <h1 className="pa-auth__headline">PARASHU</h1>
+            <span className="pa-auth__accent-line" aria-hidden="true" />
             <p className="pa-auth__tagline">
               Emergency Response &amp; Safety Platform
             </p>
 
-            {/* Small elegant accent line below the subtitle */}
-            <span className="pa-auth__accent-line" aria-hidden="true" />
-
-            <p className="pa-auth__motto">
-              Protect. Respond. Connect.
-            </p>
-
-            {/* Compact & Premium Continue Button */}
+            {/* Premium CTA Button */}
             <button
               type="button"
               className="pa-landing-btn"
               onClick={() => setStep("selection")}
             >
               <span>Continue to Parashu</span>
-              <ArrowRight size={15} />
+              <ArrowRight size={16} />
             </button>
           </div>
         )}
@@ -420,7 +404,8 @@ export default function Login() {
           </div>
         )}
 
-        <p className="ks-auth__foot">SPRINGX &rarr; PARASHU</p>
+        {/* User-requested team name & small statement footer */}
+        <p className="ks-auth__foot">Parashu &middot; safety &amp; response platform</p>
       </div>
     </div>
   );
