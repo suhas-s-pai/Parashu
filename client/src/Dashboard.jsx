@@ -304,7 +304,9 @@ export default function Dashboard({ focus = "active" }) {
   };
 
   const knownIdsRef = useRef(new Set());
+  const initialLoadCompleteRef = useRef(false);
   const sirenRef = useRef(null);
+  const sirenTimeoutRef = useRef(null);
   const addressRequestsRef = useRef(new Set());
   // Read through a ref so flipping the toggle does not tear down and rebuild
   // the live event stream.
@@ -314,11 +316,48 @@ export default function Dashboard({ focus = "active" }) {
     sirenEnabledRef.current = prefs.sirenOnNewAlert;
   }, [prefs.sirenOnNewAlert]);
 
-  // Announce genuinely new incidents only — the feed rebroadcasts on every
-  // location ping, and a siren on each one would be unusable.
+  // Plays siren sound strictly for 4 seconds, then pauses and resets audio
+  const playSiren4Seconds = useCallback(() => {
+    if (!sirenEnabledRef.current || !sirenRef.current) return;
+
+    if (sirenTimeoutRef.current) {
+      clearTimeout(sirenTimeoutRef.current);
+      sirenTimeoutRef.current = null;
+    }
+
+    try {
+      sirenRef.current.currentTime = 0;
+      const playPromise = sirenRef.current.play();
+      if (playPromise !== undefined) {
+        playPromise.catch(() => {});
+      }
+    } catch {
+      // Ignore browser autoplay restriction errors
+    }
+
+    sirenTimeoutRef.current = setTimeout(() => {
+      if (sirenRef.current) {
+        try {
+          sirenRef.current.pause();
+          sirenRef.current.currentTime = 0;
+        } catch {
+          // Ignore
+        }
+      }
+      sirenTimeoutRef.current = null;
+    }, 4000);
+  }, []);
+
+  // Announce genuinely new incidents only — strictly play 4s siren on NEW reports
   const announce = useCallback((alerts) => {
     const fresh = alerts.filter((alert) => !knownIdsRef.current.has(alert.id));
     knownIdsRef.current = new Set(alerts.map((alert) => alert.id));
+
+    // If initial load snapshot hasn't finished, mark complete and DO NOT play siren for old records
+    if (!initialLoadCompleteRef.current) {
+      initialLoadCompleteRef.current = true;
+      return;
+    }
 
     if (!fresh.length) return;
 
@@ -328,13 +367,8 @@ export default function Dashboard({ focus = "active" }) {
         : `${fresh.length} new emergencies received`
     );
 
-    if (sirenEnabledRef.current && sirenRef.current) {
-      sirenRef.current.currentTime = 0;
-      // Browsers reject autoplay until the operator has interacted with the
-      // page. Nothing else depends on the sound, so the failure is ignored.
-      sirenRef.current.play().catch(() => {});
-    }
-  }, []);
+    playSiren4Seconds();
+  }, [playSiren4Seconds]);
 
   const loadHistory = useCallback(async () => {
     try {
@@ -348,6 +382,21 @@ export default function Dashboard({ focus = "active" }) {
   useEffect(() => {
     sirenRef.current = new Audio("/siren.mp3");
     sirenRef.current.preload = "auto";
+
+    return () => {
+      if (sirenTimeoutRef.current) {
+        clearTimeout(sirenTimeoutRef.current);
+        sirenTimeoutRef.current = null;
+      }
+      if (sirenRef.current) {
+        try {
+          sirenRef.current.pause();
+          sirenRef.current.currentTime = 0;
+        } catch {
+          // Ignore
+        }
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -359,6 +408,7 @@ export default function Dashboard({ focus = "active" }) {
         if (cancelled) return;
         setActiveAlerts(alerts);
         knownIdsRef.current = new Set(alerts.map((alert) => alert.id));
+        initialLoadCompleteRef.current = true;
         setStatusMessage("Listening for active emergencies");
       } catch {
         if (!cancelled) setStatusMessage("Unable to reach the backend right now");
