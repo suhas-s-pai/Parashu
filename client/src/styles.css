@@ -1716,6 +1716,7 @@ a { color: inherit; }
 .pa-auth-page {
   position: relative;
   min-height: 100vh;
+  min-height: 100dvh;
   width: 100%;
   display: flex;
   align-items: center;
@@ -1724,6 +1725,49 @@ a { color: inherit; }
   background: var(--bg);
   overflow-x: hidden;
   box-sizing: border-box;
+}
+
+/* Official Logo Symbol Styling */
+.pa-auth-logo {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  filter: drop-shadow(0 0 10px rgba(220, 38, 38, 0.45));
+  flex: none;
+  transition: transform 0.2s ease, filter 0.2s ease;
+}
+
+.pa-landing-symbol-wrap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 20px;
+  position: relative;
+}
+
+.pa-landing-symbol-wrap::after {
+  content: "";
+  position: absolute;
+  inset: -14px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(220, 38, 38, 0.25) 0%, transparent 70%);
+  filter: blur(10px);
+  pointer-events: none;
+}
+
+.pa-landing-symbol {
+  width: 76px;
+  height: 76px;
+  object-fit: contain;
+  position: relative;
+  z-index: 1;
+  filter: drop-shadow(0 0 18px rgba(220, 38, 38, 0.5));
+  animation: paPulseLogo 4s ease-in-out infinite alternate;
+}
+
+@keyframes paPulseLogo {
+  0% { transform: scale(1); filter: drop-shadow(0 0 14px rgba(220, 38, 38, 0.4)); }
+  100% { transform: scale(1.04); filter: drop-shadow(0 0 24px rgba(220, 38, 38, 0.7)); }
 }
 
 /* Responsive Background Glowing Orbs (Desktop, Tablet & Mobile) */
@@ -1827,38 +1871,23 @@ a { color: inherit; }
   -webkit-backdrop-filter: blur(8px);
 }
 
-.pa-auth__mark {
-  display: grid;
-  place-items: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 8px;
-  background: var(--emergency);
-  color: #fff;
-  box-shadow: 0 4px 16px rgba(220, 38, 38, 0.4);
-  flex: none;
-}
-
 .pa-auth__brand-text {
   display: flex;
   flex-direction: column;
 }
 
 .pa-auth__wordmark {
-  font-size: 16px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
   line-height: 1.1;
-}
-
-.pa-auth__wordmark span {
-  color: var(--emergency);
+  color: #f8fafc;
 }
 
 .pa-auth__subwordmark {
-  font-size: 10.5px;
+  font-size: 10px;
   color: var(--muted);
-  letter-spacing: 0.02em;
+  letter-spacing: 0.03em;
 }
 
 .pa-auth__live {
@@ -1892,7 +1921,7 @@ a { color: inherit; }
 /* Landing Step */
 .pa-auth__step--landing {
   text-align: center;
-  padding: 28px 24px;
+  padding: 32px 24px 28px;
   border-radius: var(--r-xl);
   background: var(--surface);
   border: 1px solid var(--line-strong);
@@ -1902,15 +1931,15 @@ a { color: inherit; }
 }
 
 .pa-auth__headline {
-  margin: 0 0 10px;
-  font-size: 22px;
-  font-weight: 700;
-  letter-spacing: -0.03em;
-  color: var(--text);
+  margin: 0 0 8px;
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: #f8fafc;
 }
 
 .pa-auth__tagline {
-  margin: 0 0 24px;
+  margin: 0 0 28px;
   font-size: 13.5px;
   line-height: 1.5;
   color: var(--muted);
@@ -1924,7 +1953,7 @@ a { color: inherit; }
   width: 100%;
   height: 48px;
   border-radius: var(--r-md);
-  border: none;
+  border: 1px solid rgba(239, 68, 68, 0.4);
   background: linear-gradient(135deg, #ef4444, #dc2626);
   color: #ffffff;
   font-size: 15px;
@@ -1936,12 +1965,12 @@ a { color: inherit; }
 
 .pa-landing-btn:hover {
   transform: translateY(-1px);
-  box-shadow: 0 12px 28px rgba(239, 68, 68, 0.45);
+  box-shadow: 0 12px 28px rgba(239, 68, 68, 0.5);
   filter: brightness(1.05);
 }
 
 .pa-landing-btn:active {
-  transform: translateY(0);
+  transform: scale(0.98);
 }
 
 /* Selection Step */

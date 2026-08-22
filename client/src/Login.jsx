@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import {
-  ShieldAlert,
   ShieldCheck,
   HelpCircle,
   User,
@@ -9,7 +8,6 @@ import {
   ArrowRight,
   ArrowLeft,
   Lock,
-  ChevronRight,
 } from "lucide-react";
 import { useAuth } from "./lib/authContext";
 
@@ -102,7 +100,7 @@ export default function Login() {
 
   return (
     <div className="pa-auth-page">
-      {/* Background Orbs & Radar Sweep (Visible & Animated on Desktop, Tablet & Mobile) */}
+      {/* Ambient Red/Blue Background Orbs & Radar Sweep (Visible & Animated on Mobile & Desktop) */}
       <div className="pa-auth-glow pa-auth-glow--red" />
       <div className="pa-auth-glow pa-auth-glow--blue" />
       <div className="pa-auth-radar" aria-hidden="true">
@@ -114,12 +112,10 @@ export default function Login() {
       <div className="pa-auth-container">
         {/* Top Brand Header */}
         <div className="pa-auth__brand-header">
-          <div className="pa-auth__mark">
-            <ShieldAlert size={20} strokeWidth={2.2} />
-          </div>
+          <img src="/symbol.png" alt="Parashu Logo" className="pa-auth-logo" />
           <div className="pa-auth__brand-text">
-            <span className="pa-auth__wordmark">Para<span>shu</span></span>
-            <span className="pa-auth__subwordmark">Safety & Control Platform</span>
+            <span className="pa-auth__wordmark">PARASHU</span>
+            <span className="pa-auth__subwordmark">Safety Platform</span>
           </div>
           <span className="pa-auth__live">
             <span className="ks-dot ks-dot--green" /> Live
@@ -129,11 +125,12 @@ export default function Login() {
         {/* STEP 0: LANDING */}
         {step === "landing" && (
           <div className="pa-auth__step pa-auth__step--landing">
-            <h1 className="pa-auth__headline">
-              Emergency Response Platform
-            </h1>
+            <div className="pa-landing-symbol-wrap">
+              <img src="/symbol.png" alt="Parashu Symbol" className="pa-landing-symbol" />
+            </div>
+            <h1 className="pa-auth__headline">PARASHU</h1>
             <p className="pa-auth__tagline">
-              Instant emergency tracking, voice protection, and control room monitoring.
+              Emergency Response &amp; Safety Platform
             </p>
 
             <button
@@ -159,7 +156,7 @@ export default function Login() {
                 <ArrowLeft size={14} /> Back
               </button>
               <h2>Select Portal</h2>
-              <p>Choose how you want to continue</p>
+              <p>Choose your access destination</p>
             </div>
 
             <div className="pa-selection-grid">
@@ -169,7 +166,7 @@ export default function Login() {
                   <ShieldCheck size={24} strokeWidth={2} />
                 </div>
                 <div className="pa-selection-card__body">
-                  <h3>Personal Safety</h3>
+                  <h3>PERSONAL SAFETY</h3>
                   <p>Access your personal emergency and safety dashboard.</p>
                 </div>
                 <button
@@ -178,7 +175,7 @@ export default function Login() {
                   onClick={() => setStep("personal")}
                 >
                   <span>Continue</span>
-                  <ChevronRight size={16} />
+                  <ArrowRight size={16} />
                 </button>
               </div>
 
@@ -188,7 +185,7 @@ export default function Login() {
                   <Lock size={24} strokeWidth={2} />
                 </div>
                 <div className="pa-selection-card__body">
-                  <h3>Administrator</h3>
+                  <h3>ADMINISTRATOR</h3>
                   <p>Access the emergency control room.</p>
                 </div>
                 <button
@@ -197,7 +194,7 @@ export default function Login() {
                   onClick={() => setStep("admin")}
                 >
                   <span>Administrator Login</span>
-                  <ChevronRight size={16} />
+                  <ArrowRight size={16} />
                 </button>
               </div>
             </div>
