@@ -600,25 +600,6 @@ app.get("/alert-status/:phone", requireUser, async (req, res) => {
   }
 });
 
-app.use((req, res) => {
-  fail(res, 404, "Route not found", "NOT_FOUND");
-});
-
-app.use((err, req, res, next) => {
-  if (err.type === "entity.parse.failed" || err instanceof SyntaxError) {
-    console.warn(`[${req.method} ${req.path}] invalid JSON body`);
-    return fail(res, 400, "Invalid JSON body", "VALIDATION_ERROR");
-  }
-
-  if (err.type === "entity.too.large") {
-    console.warn(`[${req.method} ${req.path}] body too large`);
-    return fail(res, 413, "Request body too large", "PAYLOAD_TOO_LARGE");
-  }
-
-  console.error("[unhandled]", err);
-  fail(res, 500, "Unexpected server error", "INTERNAL_ERROR");
-});
-
 /* ------------------------------------------------------------------ *
  * Admin Invitation & Request Routes
  * ------------------------------------------------------------------ */
@@ -780,6 +761,29 @@ app.post("/admin-requests/:id/reject", requireAdmin, async (req, res) => {
   } catch (err) {
     return fail(res, 500, "Could not reject admin request", "SERVER_ERROR");
   }
+});
+
+/* ------------------------------------------------------------------ *
+ * Global 404 & Error-Handling Middleware (Must be after all routes)
+ * ------------------------------------------------------------------ */
+
+app.use((req, res) => {
+  fail(res, 404, "Route not found", "NOT_FOUND");
+});
+
+app.use((err, req, res, next) => {
+  if (err.type === "entity.parse.failed" || err instanceof SyntaxError) {
+    console.warn(`[${req.method} ${req.path}] invalid JSON body`);
+    return fail(res, 400, "Invalid JSON body", "VALIDATION_ERROR");
+  }
+
+  if (err.type === "entity.too.large") {
+    console.warn(`[${req.method} ${req.path}] body too large`);
+    return fail(res, 413, "Request body too large", "PAYLOAD_TOO_LARGE");
+  }
+
+  console.error("[unhandled]", err);
+  fail(res, 500, "Unexpected server error", "INTERNAL_ERROR");
 });
 
 async function checkDatabase() {
