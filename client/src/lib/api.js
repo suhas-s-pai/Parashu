@@ -119,3 +119,13 @@ export async function rejectAdminRequest(id) {
   const res = await api.post(`/admin-requests/${encodeURIComponent(id)}/reject`);
   return res.data;
 }
+
+export async function fetchNearbyHospitals(lat, lon) {
+  try {
+    const res = await api.get(`/alerts/nearby-hospitals?lat=${lat}&lon=${lon}`);
+    return res.data?.hospitals || [];
+  } catch (err) {
+    console.warn("[api] backend nearby hospitals endpoint failed, using fallback:", err);
+    throw err;
+  }
+}

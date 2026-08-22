@@ -13,6 +13,7 @@ import {
   fetchAdminRequests,
   approveAdminRequest,
   rejectAdminRequest,
+  fetchNearbyHospitals,
 } from "./lib/api";
 import {
   formatCoordinates,
@@ -47,269 +48,228 @@ import {
   Trash2,
   UserPlus,
   UserRound,
+  Volume2,
   X,
 } from "lucide-react";
 
-// Rounded to roughly 10 m so a stationary caller does not reload the embedded
-// map on every five second location ping.
-function mapKeyFor(alert) {
-  if (!Number.isFinite(alert?.latitude) || !Number.isFinite(alert?.longitude)) {
-    return null;
-  }
+function getDistanceKm(lat1, lon1, lat2, lon2) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * (Math.PI / 180);
+  const dLon = (lon2 - lon1) * (Math.PI / 180);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * (Math.PI / 180)) *
+      Math.cos(lat2 * (Math.PI / 180)) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
 
-  return `${alert.latitude.toFixed(4)},${alert.longitude.toFixed(4)}`;
+// Component to fetch and display nearby emergency medical facilities / hospitals for an SOS alert
+function NearbyHospitalsList({ alert }) {
+  const [hospitals, setHospitals] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!alert || !Number.isFinite(alert.latitude) || !Number.isFinite(alert.longitude)) {
+      return;
+    }
+
+    let isMounted = true;
+    setLoading(true);
+    setError("");
+
+    const loadHospitals = async () => {
+      try {
+        const { latitude, longitude } = alert;
+        let data = [];
+
+        try {
+          data = await fetchNearbyHospitals(latitude, longitude);
+        } catch {
+          // Direct fallback if backend API route is unreachable
+          const query = `
+            [out:json][timeout:15];
+            (
+              node["amenity"="hospital"](around:10000,${latitude},${longitude});
+              way["amenity"="hospital"](around:10000,${latitude},${longitude});
+              relation["amenity"="hospital"](around:10000,${latitude},${longitude});
+              node["amenity"="clinic"](around:10000,${latitude},${longitude});
+              way["amenity"="clinic"](around:10000,${latitude},${longitude});
+              node["healthcare"="hospital"](around:10000,${latitude},${longitude});
+            );
+            out center 15;
+          `;
+          const res = await fetch(
+            `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`
+          );
+          if (res.ok) {
+            const raw = await res.json();
+            data = (raw.elements || [])
+              .map((item) => {
+                const latVal = item.lat ?? item.center?.lat;
+                const lonVal = item.lon ?? item.center?.lon;
+                if (!latVal || !lonVal) return null;
+                const tags = item.tags || {};
+                const dist = getDistanceKm(latitude, longitude, latVal, lonVal);
+                const street = tags["addr:street"] || tags["addr:full"] || "";
+                const city = tags["addr:city"] || tags["addr:suburb"] || "";
+                const address =
+                  [street, city].filter(Boolean).join(", ") || "Address available on map";
+                const phone =
+                  tags.phone || tags["contact:phone"] || tags["emergency:phone"] || null;
+                return {
+                  id: String(item.id || `${latVal}-${lonVal}`),
+                  name: tags.name || tags["name:en"] || "Emergency Hospital",
+                  address,
+                  phone,
+                  distanceKm: dist,
+                  lat: latVal,
+                  lon: lonVal,
+                };
+              })
+              .filter(Boolean)
+              .sort((a, b) => a.distanceKm - b.distanceKm)
+              .slice(0, 5);
+          }
+        }
+
+        if (!isMounted) return;
+
+        setHospitals(data || []);
+        if (!data || data.length === 0) {
+          setError("No nearby hospitals found.");
+        }
+      } catch {
+        if (isMounted) {
+          setError("Unable to load nearby hospitals right now.");
+        }
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    };
+
+    loadHospitals();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [alert]);
+
+  return (
+    <div className="pa-nearby-hospitals-box">
+      <div className="pa-nearby-hospitals-header">
+        <span className="pa-hospitals-title">🏥 Nearby Emergency Medical Facilities</span>
+        <span className="pa-hospitals-subtitle">(Around SOS coordinates)</span>
+      </div>
+
+      {loading && (
+        <div className="pa-hospitals-status">
+          Searching nearest medical facilities around SOS location…
+        </div>
+      )}
+
+      {error && !loading && (
+        <div className="pa-hospitals-status pa-hospitals-error">
+          {error}
+        </div>
+      )}
+
+      {!loading && !error && hospitals.length > 0 && (
+        <div className="pa-hospitals-list">
+          {hospitals.map((hosp) => (
+            <div key={hosp.id} className="pa-hospital-card">
+              <div className="pa-hospital-info">
+                <div className="pa-hospital-name">{hosp.name}</div>
+                <div className="pa-hospital-addr">{hosp.address}</div>
+                {hosp.phone && (
+                  <div className="pa-hospital-phone">📞 {hosp.phone}</div>
+                )}
+              </div>
+              <div className="pa-hospital-side">
+                <span className="pa-hospital-dist">
+                  {hosp.distanceKm < 1
+                    ? `${Math.round(hosp.distanceKm * 1000)} m`
+                    : `${hosp.distanceKm.toFixed(1)} km`}
+                </span>
+                <a
+                  href={`https://www.google.com/maps/search/?api=1&query=${hosp.lat},${hosp.lon}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="pa-hospital-map-link"
+                >
+                  View on Map
+                </a>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function LiveMap({ alert }) {
-  const key = mapKeyFor(alert);
-
-  const src = useMemo(() => {
-    if (!key) return "";
-    const [lat, lon] = key.split(",").map(Number);
-    return osmEmbedUrl(lat, lon);
-  }, [key]);
-
-  if (!src) {
+  if (!Number.isFinite(alert?.latitude) || !Number.isFinite(alert?.longitude)) {
     return (
-      <div className="pa-map pa-map--empty">
+      <div className="pa-map-card pa-map-card--empty">
         <MapPin size={18} />
-        <span>Waiting for a location fix</span>
+        <span>No location coordinates provided with this alert</span>
       </div>
     );
   }
 
   return (
-    <div className="pa-map">
-      <iframe title={`Live location for ${alert.user_name}`} src={src} />
+    <div className="pa-map-card">
+      <iframe
+        title={`Live position map for ${alert.user_name}`}
+        src={osmEmbedUrl(alert.latitude, alert.longitude)}
+        loading="lazy"
+      />
     </div>
   );
 }
 
-export default function Dashboard({ focus = "active" }) {
+export default function Dashboard() {
   const { user, signOut } = useAuth();
-  const [prefs, togglePref] = usePrefs();
+  const { prefs, togglePref } = usePrefs();
 
-  const [activeSection, setActiveSection] = useState(focus);
   const [activeAlerts, setActiveAlerts] = useState([]);
   const [history, setHistory] = useState([]);
-  const [selectedId, setSelectedId] = useState(null);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [statusMessage, setStatusMessage] = useState("Connecting to the alert feed");
   const [addresses, setAddresses] = useState({});
-  const [clearingHistory, setClearingHistory] = useState(false);
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [deleteSuccessMsg, setDeleteSuccessMsg] = useState("");
-  const [deleteErrorMsg, setDeleteErrorMsg] = useState("");
+  const [selectedId, setSelectedId] = useState(null);
+
+  const [tab, setTab] = useState("active");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusMessage, setStatusMessage] = useState("Connecting to emergency stream…");
 
   const [admins, setAdmins] = useState([]);
   const [adminRequests, setAdminRequests] = useState([]);
+  const [adminsLoading, setAdminsLoading] = useState(false);
+  const [adminsError, setAdminsError] = useState("");
+
   const [showInviteModal, setShowInviteModal] = useState(false);
-  const [showRemoveAdminModal, setShowRemoveAdminModal] = useState(false);
-  const [targetAdmin, setTargetAdmin] = useState(null);
-
-  // QR Code invitation state
-  const [currentInvitation, setCurrentInvitation] = useState(null);
+  const [, setInviteToken] = useState("");
+  const [inviteUrl, setInviteUrl] = useState("");
   const [qrDataUrl, setQrDataUrl] = useState("");
-  const [timeLeftSeconds, setTimeLeftSeconds] = useState(300);
-  const [generatingInvite, setGeneratingInvite] = useState(false);
-  const [shareToast, setShareToast] = useState("");
+  const [inviteExpiresAt, setInviteExpiresAt] = useState(null);
+  const [inviteTimeLeft, setInviteTimeLeft] = useState(300);
+  const [inviteLoading, setInviteLoading] = useState(false);
+  const [inviteCopied, setInviteCopied] = useState(false);
 
-  const [removeAdminError, setRemoveAdminError] = useState("");
-  const [removingAdmin, setRemovingAdmin] = useState(false);
-  const [adminMsg, setAdminMsg] = useState("");
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [clearingHistory, setClearingHistory] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteSuccessMsg, setDeleteSuccessMsg] = useState("");
 
-  const loadAdmins = useCallback(async () => {
-    try {
-      const list = await fetchAdmins();
-      setAdmins(list);
-    } catch {
-      // Failed to load admins list
-    }
-  }, []);
-
-  const loadAdminRequests = useCallback(async () => {
-    try {
-      const reqs = await fetchAdminRequests();
-      setAdminRequests(reqs);
-    } catch {
-      // Failed to load admin requests
-    }
-  }, []);
-
-  useEffect(() => {
-    if (activeSection === "admins") {
-      loadAdmins();
-      loadAdminRequests();
-    }
-  }, [activeSection, loadAdmins, loadAdminRequests]);
-
-  // Generate QR code invitation
-  const handleOpenInviteModal = async () => {
-    setGeneratingInvite(true);
-    setShareToast("");
-    setShowInviteModal(true);
-
-    try {
-      const res = await generateAdminInvitation();
-      if (res?.success && res.invitation) {
-        const inv = res.invitation;
-        setCurrentInvitation(inv);
-        const inviteUrl = `${window.location.origin}/admin/invite/${inv.token}`;
-
-        const dataUrl = await QRCode.toDataURL(inviteUrl, {
-          width: 260,
-          margin: 2,
-          color: {
-            dark: "#0f172a",
-            light: "#ffffff",
-          },
-        });
-        setQrDataUrl(dataUrl);
-
-        const remaining = Math.max(0, Math.floor((inv.expires_at - Date.now()) / 1000));
-        setTimeLeftSeconds(remaining || 300);
-      }
-    } catch {
-      // Error generating invitation
-    } finally {
-      setGeneratingInvite(false);
-    }
-  };
-
-  // Live countdown timer effect for active QR code modal
-  useEffect(() => {
-    if (!showInviteModal || !currentInvitation || timeLeftSeconds <= 0) return;
-
-    const timer = setInterval(() => {
-      setTimeLeftSeconds((prev) => {
-        if (prev <= 1) {
-          clearInterval(timer);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
-    return () => clearInterval(timer);
-  }, [showInviteModal, currentInvitation, timeLeftSeconds]);
-
-  // Share invitation button handler
-  const handleShareInvitation = async () => {
-    if (!currentInvitation) return;
-    const inviteUrl = `${window.location.origin}/admin/invite/${currentInvitation.token}`;
-    const shareMessage = `You're invited to become an administrator of Parashu. Open this invitation to request admin access: ${inviteUrl}`;
-
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title: "Parashu Administrator Invitation",
-          text: shareMessage,
-          url: inviteUrl,
-        });
-        return;
-      } catch {
-        // Fallback to clipboard if share was cancelled or failed
-      }
-    }
-
-    try {
-      await navigator.clipboard.writeText(inviteUrl);
-      setShareToast("Invitation link copied!");
-      setTimeout(() => setShareToast(""), 4000);
-    } catch {
-      setShareToast("Copy failed. Link: " + inviteUrl);
-    }
-  };
-
-  // Approve Admin Request
-  const handleApproveRequest = async (reqId) => {
-    try {
-      const res = await approveAdminRequest(reqId);
-      if (res?.success) {
-        setAdminMsg(res.message || "Administrator request approved.");
-        setTimeout(() => setAdminMsg(""), 6000);
-        loadAdmins();
-        loadAdminRequests();
-      }
-    } catch (err) {
-      setAdminMsg(err?.response?.data?.message || err?.message || "Could not approve admin request.");
-      setTimeout(() => setAdminMsg(""), 6000);
-    }
-  };
-
-  // Reject Admin Request
-  const handleRejectRequest = async (reqId) => {
-    try {
-      const res = await rejectAdminRequest(reqId);
-      if (res?.success) {
-        setAdminMsg(res.message || "Administrator request rejected.");
-        setTimeout(() => setAdminMsg(""), 6000);
-        loadAdminRequests();
-      }
-    } catch (err) {
-      setAdminMsg(err?.response?.data?.message || err?.message || "Could not reject admin request.");
-      setTimeout(() => setAdminMsg(""), 6000);
-    }
-  };
-
-  const handleConfirmRemoveAdmin = async () => {
-    if (!targetAdmin) return;
-    setRemovingAdmin(true);
-    setRemoveAdminError("");
-
-    try {
-      await deleteAdmin(targetAdmin.user_id);
-      setShowRemoveAdminModal(false);
-      setTargetAdmin(null);
-      setAdminMsg("Administrator removed successfully.");
-      setTimeout(() => setAdminMsg(""), 6000);
-      loadAdmins();
-    } catch (err) {
-      setRemoveAdminError(
-        err?.response?.data?.message ||
-          err?.message ||
-          "Could not remove administrator."
-      );
-    } finally {
-      setRemovingAdmin(false);
-    }
-  };
-
-  const handleConfirmDeleteHistory = async () => {
-    setClearingHistory(true);
-    setDeleteSuccessMsg("");
-    setDeleteErrorMsg("");
-
-    try {
-      const result = await clearResolvedHistory();
-      setHistory([]);
-      setShowDeleteModal(false);
-      const countText = Number.isFinite(result?.deletedCount)
-        ? ` (${result.deletedCount} record${result.deletedCount === 1 ? "" : "s"} removed)`
-        : "";
-      setDeleteSuccessMsg(`Resolved SOS history deleted successfully${countText}.`);
-      setStatusMessage("Resolved SOS history has been permanently cleared from database");
-      setTimeout(() => setDeleteSuccessMsg(""), 6000);
-    } catch (err) {
-      const errMsg =
-        err?.response?.data?.message ||
-        err?.message ||
-        "Could not delete resolved history from database.";
-      setDeleteErrorMsg(errMsg);
-      setStatusMessage(`Delete failed: ${errMsg}`);
-    } finally {
-      setClearingHistory(false);
-    }
-  };
-
-  const knownIdsRef = useRef(new Set());
-  const initialLoadCompleteRef = useRef(false);
+  const announcedAlertIdsRef = useRef(new Set());
+  const isInitialLoadRef = useRef(true);
   const sirenRef = useRef(null);
   const sirenTimeoutRef = useRef(null);
   const addressRequestsRef = useRef(new Set());
-  // Read through a ref so flipping the toggle does not tear down and rebuild
-  // the live event stream.
+  const [audioBlocked, setAudioBlocked] = useState(false);
+
   const sirenEnabledRef = useRef(prefs.sirenOnNewAlert);
 
   useEffect(() => {
@@ -318,21 +278,35 @@ export default function Dashboard({ focus = "active" }) {
 
   // Plays siren sound strictly for 4 seconds, then pauses and resets audio
   const playSiren4Seconds = useCallback(() => {
-    if (!sirenEnabledRef.current || !sirenRef.current) return;
+    if (!sirenEnabledRef.current) return;
 
     if (sirenTimeoutRef.current) {
       clearTimeout(sirenTimeoutRef.current);
       sirenTimeoutRef.current = null;
     }
 
+    if (!sirenRef.current) {
+      sirenRef.current = new Audio("/siren.mp3");
+      sirenRef.current.preload = "auto";
+    }
+
     try {
       sirenRef.current.currentTime = 0;
+      sirenRef.current.loop = false;
       const playPromise = sirenRef.current.play();
+
       if (playPromise !== undefined) {
-        playPromise.catch(() => {});
+        playPromise
+          .then(() => {
+            setAudioBlocked(false);
+          })
+          .catch((err) => {
+            console.warn("Siren autoplay rejected by browser:", err);
+            setAudioBlocked(true);
+          });
       }
     } catch {
-      // Ignore browser autoplay restriction errors
+      setAudioBlocked(true);
     }
 
     sirenTimeoutRef.current = setTimeout(() => {
@@ -348,27 +322,34 @@ export default function Dashboard({ focus = "active" }) {
     }, 4000);
   }, []);
 
-  // Announce genuinely new incidents only — strictly play 4s siren on NEW reports
-  const announce = useCallback((alerts) => {
-    const fresh = alerts.filter((alert) => !knownIdsRef.current.has(alert.id));
-    knownIdsRef.current = new Set(alerts.map((alert) => alert.id));
+  // Announce genuinely NEW incidents only — strictly play 4s siren on NEW real-time reports
+  const announce = useCallback(
+    (alerts) => {
+      const unannounced = alerts.filter(
+        (alert) => !announcedAlertIdsRef.current.has(alert.id)
+      );
 
-    // If initial load snapshot hasn't finished, mark complete and DO NOT play siren for old records
-    if (!initialLoadCompleteRef.current) {
-      initialLoadCompleteRef.current = true;
-      return;
-    }
+      // Register all incoming alert IDs into known set so re-renders/polls do not re-trigger
+      alerts.forEach((alert) => announcedAlertIdsRef.current.add(alert.id));
 
-    if (!fresh.length) return;
+      // Suppress siren on initial dashboard mount, page refresh, or stream snapshot
+      if (isInitialLoadRef.current) {
+        isInitialLoadRef.current = false;
+        return;
+      }
 
-    setStatusMessage(
-      fresh.length === 1
-        ? `New emergency from ${fresh[0].user_name}`
-        : `${fresh.length} new emergencies received`
-    );
+      if (!unannounced.length) return;
 
-    playSiren4Seconds();
-  }, [playSiren4Seconds]);
+      setStatusMessage(
+        unannounced.length === 1
+          ? `New emergency from ${unannounced[0].user_name}`
+          : `${unannounced.length} new emergencies received`
+      );
+
+      playSiren4Seconds();
+    },
+    [playSiren4Seconds]
+  );
 
   const loadHistory = useCallback(async () => {
     try {
@@ -407,8 +388,8 @@ export default function Dashboard({ focus = "active" }) {
         const alerts = (await fetchActiveAlerts()).map(normalizeAlert);
         if (cancelled) return;
         setActiveAlerts(alerts);
-        knownIdsRef.current = new Set(alerts.map((alert) => alert.id));
-        initialLoadCompleteRef.current = true;
+        alerts.forEach((alert) => announcedAlertIdsRef.current.add(alert.id));
+        isInitialLoadRef.current = false;
         setStatusMessage("Listening for active emergencies");
       } catch {
         if (!cancelled) setStatusMessage("Unable to reach the backend right now");
@@ -440,13 +421,12 @@ export default function Dashboard({ focus = "active" }) {
       if (isUpdate) {
         announce(alerts);
       } else {
-        knownIdsRef.current = new Set(alerts.map((alert) => alert.id));
+        alerts.forEach((alert) => announcedAlertIdsRef.current.add(alert.id));
+        isInitialLoadRef.current = false;
         setStatusMessage("Realtime connected");
       }
     };
 
-    // The stream is admin only, so its URL carries the access token and has to
-    // be built asynchronously — EventSource cannot send an auth header.
     const connect = async () => {
       const url = await getAlertStreamUrl();
       if (closed) return;
@@ -467,13 +447,159 @@ export default function Dashboard({ focus = "active" }) {
     };
   }, [announce, prefs.realtime]);
 
+  const loadAdminsAndRequests = useCallback(async () => {
+    setAdminsLoading(true);
+    setAdminsError("");
+    try {
+      const [adminList, requestList] = await Promise.all([
+        fetchAdmins(),
+        fetchAdminRequests(),
+      ]);
+      setAdmins(adminList);
+      setAdminRequests(requestList);
+    } catch {
+      setAdminsError("Failed to load admin directory or requests.");
+    } finally {
+      setAdminsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (tab === "admins") {
+      loadAdminsAndRequests();
+    }
+  }, [tab, loadAdminsAndRequests]);
+
+  const handleGenerateInvitation = async () => {
+    setInviteLoading(true);
+    setInviteCopied(false);
+    try {
+      const res = await generateAdminInvitation();
+      if (res.success) {
+        setInviteToken(res.token);
+        const fullUrl = `${window.location.origin}/admin/invite/${res.token}`;
+        setInviteUrl(fullUrl);
+        setInviteExpiresAt(res.expiresAt);
+        setInviteTimeLeft(300);
+
+        const qr = await QRCode.toDataURL(fullUrl, {
+          width: 240,
+          margin: 2,
+          color: { dark: "#0f172a", light: "#ffffff" },
+        });
+        setQrDataUrl(qr);
+        setShowInviteModal(true);
+      }
+    } catch {
+      setStatusMessage("Failed to generate admin invitation.");
+    } finally {
+      setInviteLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!showInviteModal || !inviteExpiresAt) return undefined;
+
+    const timer = setInterval(() => {
+      const remaining = Math.max(0, Math.floor((inviteExpiresAt - Date.now()) / 1000));
+      setInviteTimeLeft(remaining);
+      if (remaining <= 0) {
+        clearInterval(timer);
+      }
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [showInviteModal, inviteExpiresAt]);
+
+  const handleCopyInviteUrl = async () => {
+    try {
+      await navigator.clipboard.writeText(inviteUrl);
+      setInviteCopied(true);
+      setTimeout(() => setInviteCopied(false), 3000);
+    } catch {
+      // Fallback
+    }
+  };
+
+  const handleShareInviteUrl = async () => {
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: "Parashu Admin Invitation",
+          text: "Scan or open this link to request Parashu Administrator access:",
+          url: inviteUrl,
+        });
+      } catch {
+        // Share cancelled
+      }
+    } else {
+      handleCopyInviteUrl();
+    }
+  };
+
+  const handleApproveRequest = async (id) => {
+    try {
+      const res = await approveAdminRequest(id);
+      if (res.success) {
+        setStatusMessage(res.message || "Admin request approved.");
+        loadAdminsAndRequests();
+      }
+    } catch (err) {
+      setStatusMessage(err?.response?.data?.message || "Failed to approve admin request.");
+    }
+  };
+
+  const handleRejectRequest = async (id) => {
+    try {
+      const res = await rejectAdminRequest(id);
+      if (res.success) {
+        setStatusMessage(res.message || "Admin request rejected.");
+        loadAdminsAndRequests();
+      }
+    } catch (err) {
+      setStatusMessage(err?.response?.data?.message || "Failed to reject admin request.");
+    }
+  };
+
+  const handleDeleteAdmin = async (adminId, adminEmail) => {
+    if (!window.confirm(`Are you sure you want to remove ${adminEmail} from administrators?`)) {
+      return;
+    }
+    try {
+      const res = await deleteAdmin(adminId);
+      if (res.success) {
+        setStatusMessage(`Administrator ${adminEmail} removed.`);
+        loadAdminsAndRequests();
+      }
+    } catch (err) {
+      setStatusMessage(err?.response?.data?.message || "Failed to remove admin.");
+    }
+  };
+
+  const handleDeleteHistoryConfirm = async () => {
+    setClearingHistory(true);
+    setDeleteSuccessMsg("");
+    try {
+      const res = await clearResolvedHistory();
+      if (res.success) {
+        setHistory([]);
+        setShowDeleteModal(false);
+        setDeleteSuccessMsg("All resolved history records have been deleted.");
+        setTimeout(() => setDeleteSuccessMsg(""), 5000);
+      }
+    } catch (err) {
+      const errMsg = err?.response?.data?.message || err?.message || "Deletion failed";
+      setStatusMessage(`Delete failed: ${errMsg}`);
+    } finally {
+      setClearingHistory(false);
+    }
+  };
+
   const selected = useMemo(
     () => activeAlerts.find((alert) => alert.id === selectedId) || null,
     [activeAlerts, selectedId]
   );
 
-  // One reverse geocode per incident. Nominatim asks for at most one request
-  // per second, so the moving position is not re-resolved on every ping.
   useEffect(() => {
     if (!selected || addressRequestsRef.current.has(selected.id)) return;
     if (!Number.isFinite(selected.latitude) || !Number.isFinite(selected.longitude)) return;
@@ -500,7 +626,7 @@ export default function Dashboard({ focus = "active" }) {
     try {
       await resolveAlert(alert.id);
       setActiveAlerts((prev) => prev.filter((item) => item.id !== alert.id));
-      knownIdsRef.current.delete(alert.id);
+      announcedAlertIdsRef.current.delete(alert.id);
       setSelectedId(null);
       setStatusMessage(`${alert.user_name}'s emergency was marked resolved`);
       loadHistory();
@@ -518,6 +644,27 @@ export default function Dashboard({ focus = "active" }) {
   const renderActiveView = () => (
     <div className="pa-content-grid">
       <section className="pa-live-card">
+        {audioBlocked && (
+          <div className="pa-audio-notice-banner">
+            <div className="pa-audio-notice-text">
+              <Volume2 size={16} />
+              <span>Siren audio was muted by browser autoplay policy. Click to unlock emergency siren alerts.</span>
+            </div>
+            <button
+              type="button"
+              className="pa-btn pa-btn--primary"
+              onClick={() => {
+                if (sirenRef.current) {
+                  sirenRef.current.play().then(() => sirenRef.current.pause()).catch(() => {});
+                }
+                setAudioBlocked(false);
+              }}
+            >
+              Enable Siren Sound
+            </button>
+          </div>
+        )}
+
         <div className="pa-panel-head">
           <div>
             <p className="pa-kicker">Active SOS</p>
@@ -632,6 +779,9 @@ export default function Dashboard({ focus = "active" }) {
                       </div>
                     </div>
 
+                    {/* Nearby Emergency Medical Facilities / Hospitals */}
+                    <NearbyHospitalsList alert={alert} />
+
                     <div className="pa-actions">
                       <a
                         className="pa-btn"
@@ -718,14 +868,13 @@ export default function Dashboard({ focus = "active" }) {
         {filteredHistory.map((item) => (
           <article key={item.id} className="pa-history-card">
             <div>
-              <strong>{item.user_name}</strong>
-              <p>{item.phone}</p>
+              <h3>{item.user_name}</h3>
+              <p>{item.phone} · {item.email}</p>
+              <span className="pa-meta-line">
+                Resolved {formatTime(item.updated_at || item.created_at)}
+              </span>
             </div>
-            <div>
-              <span>{formatTime(item.created_at)}</span>
-              <small>{item.trigger_type}</small>
-            </div>
-            <span className="pa-pill pa-pill--success">Resolved</span>
+            <span className="pa-pill pa-pill--resolved">Resolved</span>
           </article>
         ))}
       </div>
@@ -736,340 +885,234 @@ export default function Dashboard({ focus = "active" }) {
     <section className="pa-history-panel">
       <div className="pa-panel-head">
         <div>
-          <p className="pa-kicker">Access Control</p>
-          <h2>Administrator Management</h2>
+          <p className="pa-kicker">Administration</p>
+          <h2>Admin Management</h2>
         </div>
         <button
           type="button"
-          className="pa-btn pa-btn--danger"
-          onClick={handleOpenInviteModal}
+          className="pa-btn pa-btn--primary"
+          onClick={handleGenerateInvitation}
+          disabled={inviteLoading}
         >
-          <QrCode size={16} />
-          <span>Add New Admin</span>
+          <UserPlus size={15} />
+          <span>{inviteLoading ? "Generating QR…" : "Invite New Admin"}</span>
         </button>
       </div>
 
-      {adminMsg && (
-        <div style={{ margin: "12px 0 0", padding: "10px 14px", borderRadius: 8, background: "rgba(34, 197, 94, 0.12)", border: "1px solid rgba(34, 197, 94, 0.3)", color: "#4ade80", fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}>
-          <CheckCircle2 size={16} />
-          {adminMsg}
+      {adminsError && (
+        <div style={{ margin: "12px 0 0", padding: "10px 14px", borderRadius: 8, background: "rgba(239, 68, 68, 0.12)", border: "1px solid rgba(239, 68, 68, 0.3)", color: "#f87171", fontSize: 13 }}>
+          {adminsError}
         </div>
       )}
 
       {/* Pending Admin Requests Section */}
-      {adminRequests.length > 0 && (
-        <div style={{ marginTop: 20 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-            <Clock size={16} style={{ color: "#facc15" }} />
-            <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>Pending Admin Requests ({adminRequests.length})</h3>
+      <div style={{ margin: "24px 0 32px" }}>
+        <h3 style={{ fontSize: 15, fontWeight: 700, margin: "0 0 12px", color: "#f8fafc", display: "flex", alignItems: "center", gap: 8 }}>
+          <span>Pending Admin Access Requests</span>
+          {adminRequests.length > 0 && (
+            <span className="pa-pill pa-pill--pending-status" style={{ fontSize: 11 }}>
+              {adminRequests.length} Pending
+            </span>
+          )}
+        </h3>
+
+        {adminRequests.length === 0 ? (
+          <div className="pa-empty-card" style={{ padding: "24px 16px" }}>
+            <CheckCircle2 size={20} />
+            <p style={{ margin: 0 }}>No pending admin requests at this time.</p>
           </div>
+        ) : (
           <div className="pa-history-list">
             {adminRequests.map((req) => (
-              <article key={req.id} className="pa-history-card pa-admin-card" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, borderLeft: "3px solid #facc15", flexWrap: "wrap" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 200 }}>
-                  <div className="pa-avatar" style={{ width: 40, height: 40, fontSize: 15, background: "linear-gradient(135deg, #d97706, #b45309)" }}>
-                    {req.name.charAt(0).toUpperCase()}
-                  </div>
-                  <div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <strong style={{ fontSize: 14 }}>{req.name}</strong>
-                      <span className="pa-pill" style={{ background: "rgba(234, 179, 8, 0.16)", color: "#fde047", border: "1px solid rgba(234, 179, 8, 0.3)", fontSize: 10 }}>PENDING APPROVAL</span>
-                    </div>
-                    <p style={{ margin: "2px 0 0", fontSize: 12, color: "var(--muted)" }}>
-                      {req.email} · Requested {formatTime(req.created_at)}
-                    </p>
-                  </div>
+              <article key={req.id} className="pa-history-card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div>
+                  <h3 style={{ fontSize: 14, fontWeight: 700, margin: "0 0 4px", color: "#f8fafc" }}>{req.fullName}</h3>
+                  <p style={{ margin: 0, fontSize: 12, color: "#94a3b8" }}>{req.email}</p>
+                  <span className="pa-meta-line" style={{ fontSize: 11, color: "#64748b" }}>
+                    Requested {formatTime(req.requestedAt)}
+                  </span>
                 </div>
-
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: "auto" }}>
+                <div style={{ display: "flex", gap: 8 }}>
                   <button
                     type="button"
                     className="pa-btn pa-btn--success"
-                    style={{ padding: "6px 12px", fontSize: 12 }}
+                    style={{ height: 34, padding: "0 12px", fontSize: 12 }}
                     onClick={() => handleApproveRequest(req.id)}
                   >
-                    <Check size={14} />
-                    <span>Approve</span>
+                    <Check size={14} /> Approve
                   </button>
                   <button
                     type="button"
-                    className="pa-btn pa-btn--ghost"
-                    style={{ color: "#fca5a5", borderColor: "rgba(239, 68, 68, 0.2)", padding: "6px 12px", fontSize: 12 }}
+                    className="pa-btn pa-btn--danger"
+                    style={{ height: 34, padding: "0 12px", fontSize: 12 }}
                     onClick={() => handleRejectRequest(req.id)}
                   >
-                    <X size={14} />
-                    <span>Reject</span>
+                    <X size={14} /> Reject
                   </button>
                 </div>
               </article>
             ))}
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
-      {/* Existing Administrators List */}
-      <div style={{ marginTop: 24 }}>
-        <h3 style={{ margin: "0 0 12px", fontSize: 15, fontWeight: 700, display: "flex", alignItems: "center", gap: 8 }}>
-          <ShieldCheck size={16} style={{ color: "#60a5fa" }} /> Active Administrators ({admins.length})
+      {/* Active Administrators Section */}
+      <div>
+        <h3 style={{ fontSize: 15, fontWeight: 700, margin: "0 0 12px", color: "#f8fafc" }}>
+          Active Administrators ({admins.length})
         </h3>
-        <div className="pa-history-list">
-          {admins.length === 0 && (
-            <div className="pa-empty-card">
-              <ShieldCheck size={20} />
-              <h3>Loading administrators…</h3>
-            </div>
-          )}
 
-          {admins.map((adm) => {
-            const isSelf = adm.user_id === user?.id || adm.email === user?.email;
-
-            return (
-              <article key={adm.user_id} className="pa-history-card pa-admin-card" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 200 }}>
-                  <div className="pa-avatar" style={{ width: 40, height: 40, fontSize: 15, background: isSelf ? "linear-gradient(135deg, #2563eb, #1d4ed8)" : "linear-gradient(135deg, #475569, #334155)" }}>
-                    {adm.name.charAt(0).toUpperCase()}
-                  </div>
-                  <div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <strong style={{ fontSize: 14 }}>{adm.name}</strong>
-                      {isSelf && <span className="pa-pill pa-pill--neutral" style={{ fontSize: 10 }}>You</span>}
-                    </div>
-                    <p style={{ margin: "2px 0 0", fontSize: 12, color: "var(--muted)" }}>
-                      {adm.email} · ID: <span className="pa-mono" style={{ fontSize: 11 }}>{adm.user_id.slice(0, 8)}…</span>
-                    </p>
-                  </div>
-                </div>
-
-                <div style={{ display: "flex", alignItems: "center", gap: 12, marginLeft: "auto" }}>
-                  <span className="pa-pill" style={{ fontSize: 11 }}>
+        {adminsLoading ? (
+          <div className="pa-empty-card">
+            <Clock size={20} />
+            <p>Loading admin directory…</p>
+          </div>
+        ) : (
+          <div className="pa-history-list">
+            {admins.map((adm) => (
+              <article key={adm.id} className="pa-history-card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div>
+                  <h3 style={{ fontSize: 14, fontWeight: 700, margin: "0 0 4px", color: "#f8fafc" }}>
+                    {adm.email || "Administrator"}
+                  </h3>
+                  <p style={{ margin: 0, fontSize: 12, color: "#94a3b8" }}>
+                    Role: {adm.role || "Admin"} · User ID: <span className="pa-mono">{adm.user_id}</span>
+                  </p>
+                  <span className="pa-meta-line" style={{ fontSize: 11, color: "#64748b" }}>
                     Added {formatTime(adm.created_at)}
                   </span>
+                </div>
+                {admins.length > 1 && (
                   <button
                     type="button"
                     className="pa-btn pa-btn--ghost"
-                    style={{ color: "#fca5a5", borderColor: "rgba(239, 68, 68, 0.2)" }}
-                    onClick={() => {
-                      setTargetAdmin(adm);
-                      setRemoveAdminError("");
-                      setShowRemoveAdminModal(true);
-                    }}
-                    title={`Remove ${adm.name}`}
+                    style={{ height: 34, color: "#f87171", borderColor: "rgba(239, 68, 68, 0.3)" }}
+                    onClick={() => handleDeleteAdmin(adm.id, adm.email || adm.user_id)}
+                    title="Remove administrator"
                   >
-                    <Trash2 size={14} />
-                    <span>Remove</span>
+                    <Trash2 size={14} /> Remove
                   </button>
-                </div>
+                )}
               </article>
-            );
-          })}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
     </section>
   );
-
-  const renderSettingsView = () => (
-    <section className="pa-settings-panel">
-      <div className="pa-panel-head">
-        <div>
-          <p className="pa-kicker">Settings</p>
-          <h2>Console preferences</h2>
-        </div>
-      </div>
-
-      <div className="pa-settings-card">
-        <div className="pa-setting-row">
-          <div>
-            <strong>Signed in as</strong>
-            <p>{user?.email}</p>
-          </div>
-          <span className="pa-pill">{user?.name}</span>
-        </div>
-
-        <div className="pa-setting-row">
-          <div>
-            <strong>Siren on new alert</strong>
-            <p>Plays a tone when a new emergency arrives.</p>
-          </div>
-          <button
-            className={`pa-toggle${prefs.sirenOnNewAlert ? " is-on" : ""}`}
-            onClick={() => togglePref("sirenOnNewAlert")}
-            aria-label="Siren on new alert"
-          >
-            <span />
-          </button>
-        </div>
-
-        <div className="pa-setting-row">
-          <div>
-            <strong>Realtime feed</strong>
-            <p>Stay connected to the live alert stream.</p>
-          </div>
-          <button
-            className={`pa-toggle${prefs.realtime ? " is-on" : ""}`}
-            onClick={() => togglePref("realtime")}
-            aria-label="Realtime feed"
-          >
-            <span />
-          </button>
-        </div>
-
-        <div className="pa-setting-row pa-setting-row--last">
-          <div>
-            <strong>Logout</strong>
-            <p>Exit the control room.</p>
-          </div>
-          <button className="pa-btn pa-btn--ghost" onClick={signOut}>
-            <LogOut size={14} /> Logout
-          </button>
-        </div>
-      </div>
-    </section>
-  );
-
-  const NAV = [
-    { key: "active", label: "Active SOS", icon: AlertTriangle },
-    { key: "history", label: "History", icon: History },
-    { key: "admins", label: "Admins", icon: ShieldCheck },
-    { key: "settings", label: "Settings", icon: SettingsIcon },
-  ];
-
-  const heading = NAV.find((item) => item.key === activeSection)?.label || "Active SOS";
 
   return (
-    <div className="pa-shell">
-      {sidebarOpen && (
-        <div className="pa-sidebar-backdrop" onClick={() => setSidebarOpen(false)} />
-      )}
-      <aside className={`pa-sidebar${sidebarOpen ? " is-open" : ""}`}>
-        <div className="pa-brand">
-          <div className="pa-brand__mark">
-            <ShieldAlert size={18} />
+    <div className="pa-dashboard-page">
+      <aside className="pa-sidebar">
+        <div className="pa-sidebar__brand">
+          <div className="pa-logo-circle">
+            <img src="/symbol.png" alt="Parashu Logo" />
           </div>
           <div>
-            <strong>Parashu</strong>
-            <span>Control Room</span>
+            <span className="pa-sidebar__title">PARASHU</span>
+            <span className="pa-sidebar__sub">Control Room</span>
+          </div>
+        </div>
+
+        <nav className="pa-sidebar__nav">
+          <button
+            type="button"
+            className={`pa-nav-item${tab === "active" ? " is-active" : ""}`}
+            onClick={() => setTab("active")}
+          >
+            <ShieldAlert size={16} />
+            <span>Active SOS</span>
+            {activeAlerts.length > 0 && (
+              <span className="pa-badge">{activeAlerts.length}</span>
+            )}
+          </button>
+
+          <button
+            type="button"
+            className={`pa-nav-item${tab === "history" ? " is-active" : ""}`}
+            onClick={() => setTab("history")}
+          >
+            <History size={16} />
+            <span>History</span>
+          </button>
+
+          <button
+            type="button"
+            className={`pa-nav-item${tab === "admins" ? " is-active" : ""}`}
+            onClick={() => setTab("admins")}
+          >
+            <UserRound size={16} />
+            <span>Admins</span>
+            {adminRequests.length > 0 && (
+              <span className="pa-badge" style={{ background: "#ef4444", color: "#fff" }}>
+                {adminRequests.length}
+              </span>
+            )}
+          </button>
+        </nav>
+
+        <div className="pa-sidebar__user">
+          <div className="pa-user-info">
+            <span className="pa-user-email">{user?.email}</span>
+            <span className="pa-user-role">Administrator</span>
           </div>
           <button
             type="button"
-            className="pa-sidebar-close"
-            onClick={() => setSidebarOpen(false)}
-            aria-label="Close menu"
+            className="pa-btn pa-btn--ghost pa-btn--sm"
+            onClick={signOut}
+            title="Sign out"
           >
-            <X size={18} />
-          </button>
-        </div>
-
-        <nav className="pa-nav">
-          {NAV.map((item) => {
-            const Icon = item.icon;
-            return (
-              <button
-                key={item.key}
-                className={`pa-nav-item${activeSection === item.key ? " is-active" : ""}`}
-                onClick={() => {
-                  setActiveSection(item.key);
-                  setSidebarOpen(false);
-                }}
-              >
-                <Icon size={16} />
-                <span>{item.label}</span>
-                {item.key === "active" && activeAlerts.length > 0 && (
-                  <span className="pa-pill pa-pill--danger">{activeAlerts.length}</span>
-                )}
-              </button>
-            );
-          })}
-        </nav>
-
-        <div className="pa-sidebar-footer">
-          <div className="pa-user-pill">
-            <div className="pa-avatar pa-avatar--sm"><UserRound size={14} /></div>
-            <div>
-              <strong>{user?.name || "Operator"}</strong>
-              <span>{user?.email || "Control room"}</span>
-            </div>
-          </div>
-          <button className="pa-btn pa-btn--ghost pa-btn--full" onClick={signOut}>
-            <LogOut size={14} /> Logout
+            <LogOut size={14} />
           </button>
         </div>
       </aside>
 
       <main className="pa-main">
         <header className="pa-topbar">
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div className="pa-topbar__status">
+            <span className="ks-dot ks-dot--green" />
+            <span>{statusMessage}</span>
+          </div>
+
+          <div className="pa-topbar__controls">
             <button
               type="button"
-              className="pa-mobile-menu-btn"
-              onClick={() => setSidebarOpen(!sidebarOpen)}
-              aria-label="Toggle navigation menu"
+              className={`pa-toggle${prefs.sirenOnNewAlert ? " is-on" : ""}`}
+              onClick={() => togglePref("sirenOnNewAlert")}
+              title="Toggle emergency siren on new alert"
             >
-              <Menu size={20} />
+              <BellRing size={14} />
+              <span>Siren</span>
             </button>
-            <div>
-              <p className="pa-kicker">Parashu command center</p>
-              <h1>{heading}</h1>
-            </div>
-          </div>
-          <div className="pa-topbar__meta">
-            <span className="pa-pill pa-pill--neutral">
-              <BellRing size={14} />{" "}
-              {prefs.realtime ? statusMessage : "Realtime paused"}
-            </span>
-            <span className="pa-pill">
-              <AlertTriangle size={14} /> {activeAlerts.length} active
-            </span>
           </div>
         </header>
 
-        {activeSection === "active" && renderActiveView()}
-        {activeSection === "history" && renderHistoryView()}
-        {activeSection === "admins" && renderAdminsView()}
-        {activeSection === "settings" && renderSettingsView()}
+        <div className="pa-dashboard-content">
+          {tab === "active" && renderActiveView()}
+          {tab === "history" && renderHistoryView()}
+          {tab === "admins" && renderAdminsView()}
+        </div>
       </main>
 
+      {/* Delete Resolved History Modal */}
       {showDeleteModal && (
-        <div className="ks-modal-overlay" onMouseDown={() => setShowDeleteModal(false)}>
-          <div
-            className="ks-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Confirm delete history"
-            onMouseDown={(event) => event.stopPropagation()}
-          >
-            <div className="ks-modal__head">
-              <span className="ks-modal__icon" style={{ background: "rgba(239, 68, 68, 0.15)", color: "#ef4444" }}>
-                <Trash2 size={16} strokeWidth={2} />
-              </span>
-              <h2>Delete Resolved History</h2>
+        <div className="pa-modal-overlay">
+          <div className="pa-modal pa-modal--danger">
+            <div className="pa-modal__head">
+              <AlertTriangle size={22} className="pa-modal__icon--danger" />
+              <h3>Delete Resolved History</h3>
+            </div>
+            <div className="pa-modal__body">
+              <p>Are you sure you want to delete all resolved SOS history? This action cannot be undone.</p>
+              <ul style={{ margin: "12px 0 0", paddingLeft: 20, color: "#94a3b8", fontSize: 13 }}>
+                <li>Active SOS alerts will NOT be deleted.</li>
+                <li>User &amp; admin accounts will NOT be deleted.</li>
+              </ul>
+            </div>
+            <div className="pa-modal__actions">
               <button
                 type="button"
-                className="ks-modal__close"
-                onClick={() => setShowDeleteModal(false)}
-                aria-label="Close"
-              >
-                <X size={16} strokeWidth={2} />
-              </button>
-            </div>
-
-            <div className="ks-modal__body">
-              <p style={{ margin: 0, fontSize: 13.5, color: "var(--text)" }}>
-                Delete all resolved SOS history? This action cannot be undone.
-              </p>
-              <p style={{ margin: 0, fontSize: 12, color: "var(--muted)" }}>
-                Active SOS alerts and user accounts will not be affected.
-              </p>
-              {deleteErrorMsg && (
-                <p style={{ margin: "6px 0 0", fontSize: 12.5, color: "#fca5a5", background: "rgba(220,38,38,0.15)", padding: "8px 10px", borderRadius: 6, border: "1px solid rgba(220,38,38,0.3)" }}>
-                  Error: {deleteErrorMsg}
-                </p>
-              )}
-            </div>
-
-            <div className="ks-modal__foot">
-              <button
-                type="button"
-                className="ks-btn ks-btn--ghost"
+                className="pa-btn pa-btn--ghost"
                 onClick={() => setShowDeleteModal(false)}
                 disabled={clearingHistory}
               >
@@ -1077,8 +1120,8 @@ export default function Dashboard({ focus = "active" }) {
               </button>
               <button
                 type="button"
-                className="ks-btn ks-btn--danger"
-                onClick={handleConfirmDeleteHistory}
+                className="pa-btn pa-btn--danger"
+                onClick={handleDeleteHistoryConfirm}
                 disabled={clearingHistory}
               >
                 {clearingHistory ? "Deleting…" : "Confirm Delete"}
@@ -1088,191 +1131,74 @@ export default function Dashboard({ focus = "active" }) {
         </div>
       )}
 
-      {/* Invite New Administrator QR Code Modal */}
+      {/* Admin QR Invitation Modal */}
       {showInviteModal && (
-        <div className="ks-modal-overlay" onMouseDown={() => setShowInviteModal(false)}>
-          <div
-            className="ks-modal"
-            style={{ maxWidth: 440 }}
-            role="dialog"
-            aria-modal="true"
-            aria-label="Invite New Administrator"
-            onMouseDown={(e) => e.stopPropagation()}
-          >
-            <div className="ks-modal__head">
-              <span className="ks-modal__icon" style={{ background: "rgba(220, 38, 38, 0.16)", color: "#fca5a5" }}>
-                <QrCode size={18} strokeWidth={2} />
-              </span>
-              <h2>Invite New Administrator</h2>
-              <button
-                type="button"
-                className="ks-modal__close"
-                onClick={() => setShowInviteModal(false)}
-                aria-label="Close"
-              >
-                <X size={16} strokeWidth={2} />
-              </button>
+        <div className="pa-modal-overlay">
+          <div className="pa-modal pa-modal--invite" style={{ maxWidth: 440, textAlign: "center" }}>
+            <div className="pa-modal__head" style={{ justifyContent: "center", marginBottom: 12 }}>
+              <QrCode size={24} style={{ color: "#38bdf8" }} />
+              <h3 style={{ margin: 0 }}>Invite New Administrator</h3>
             </div>
 
-            <div className="ks-modal__body" style={{ textAlign: "center", padding: "20px 20px" }}>
-              {generatingInvite ? (
-                <div style={{ padding: "40px 0", color: "var(--muted)" }}>
-                  <p>Generating invitation token and QR code…</p>
+            <div className="pa-modal__body" style={{ padding: "8px 0 16px" }}>
+              <p style={{ margin: "0 0 16px", fontSize: 13, color: "#94a3b8" }}>
+                Scan this QR code or share the invitation link with the person you want to add as an administrator.
+              </p>
+
+              {/* QR Code Container */}
+              {qrDataUrl && (
+                <div style={{ background: "#ffffff", padding: 12, borderRadius: 16, display: "inline-block", boxShadow: "0 8px 24px rgba(0, 0, 0, 0.4)" }}>
+                  <img src={qrDataUrl} alt="Admin Invite QR Code" style={{ width: 200, height: 200, display: "block" }} />
                 </div>
-              ) : (
-                <>
-                  <p style={{ margin: "0 0 16px", fontSize: 13, color: "var(--muted)" }}>
-                    Scan this QR code or share the invitation link with the person you want to add as an administrator.
-                  </p>
-
-                  {/* QR Code Container */}
-                  <div style={{ position: "relative", display: "inline-block", background: "#ffffff", padding: 12, borderRadius: 16, boxShadow: "0 4px 20px rgba(0,0,0,0.4)" }}>
-                    {qrDataUrl ? (
-                      <img
-                        src={qrDataUrl}
-                        alt="Admin Invitation QR Code"
-                        style={{ width: 220, height: 220, display: "block", filter: timeLeftSeconds === 0 ? "blur(6px) opacity(0.25)" : "none" }}
-                      />
-                    ) : (
-                      <div style={{ width: 220, height: 220, display: "grid", placeItems: "center", color: "#64748b" }}>
-                        <span>Generating QR…</span>
-                      </div>
-                    )}
-
-                    {timeLeftSeconds === 0 && (
-                      <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "rgba(2, 6, 23, 0.85)", borderRadius: 16, padding: 16 }}>
-                        <Clock size={28} style={{ color: "#ef4444", marginBottom: 6 }} />
-                        <strong style={{ color: "#fca5a5", fontSize: 14 }}>Invitation Expired</strong>
-                        <span style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>5-minute time limit reached</span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Token & Timer */}
-                  <div style={{ marginTop: 16, display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
-                    {timeLeftSeconds > 0 ? (
-                      <div style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 14px", borderRadius: 20, background: "rgba(234, 179, 8, 0.14)", border: "1px solid rgba(234, 179, 8, 0.3)", color: "#fde047", fontSize: 13, fontWeight: 600 }}>
-                        <Clock size={14} />
-                        <span>Invitation expires in {String(Math.floor(timeLeftSeconds / 60)).padStart(2, "0")}:{String(timeLeftSeconds % 60).padStart(2, "0")}</span>
-                      </div>
-                    ) : (
-                      <div style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 14px", borderRadius: 20, background: "rgba(239, 68, 68, 0.16)", border: "1px solid rgba(239, 68, 68, 0.3)", color: "#fca5a5", fontSize: 13, fontWeight: 600 }}>
-                        <Clock size={14} />
-                        <span>Invitation Expired</span>
-                      </div>
-                    )}
-
-                    {currentInvitation && (
-                      <p style={{ margin: "4px 0 0", fontSize: 11.5, color: "var(--muted)" }}>
-                        Code: <span className="pa-mono" style={{ color: "var(--text)" }}>{currentInvitation.token.slice(0, 16)}…</span>
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Toast notification */}
-                  {shareToast && (
-                    <div style={{ marginTop: 12, padding: "8px 12px", borderRadius: 6, background: "rgba(34, 197, 94, 0.15)", border: "1px solid rgba(34, 197, 94, 0.3)", color: "#4ade80", fontSize: 12.5, display: "inline-flex", alignItems: "center", gap: 6 }}>
-                      <Check size={14} />
-                      {shareToast}
-                    </div>
-                  )}
-
-                  {/* Actions */}
-                  <div style={{ marginTop: 20, display: "grid", gap: 10 }}>
-                    {timeLeftSeconds > 0 ? (
-                      <button
-                        type="button"
-                        className="ks-btn ks-btn--danger"
-                        style={{ width: "100%", justifyContent: "center", gap: 8 }}
-                        onClick={handleShareInvitation}
-                      >
-                        <Share2 size={16} />
-                        <span>Share Invitation Link</span>
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        className="ks-btn ks-btn--danger"
-                        style={{ width: "100%", justifyContent: "center", gap: 8 }}
-                        onClick={handleOpenInviteModal}
-                      >
-                        <RotateCcw size={16} />
-                        <span>Generate New Invitation</span>
-                      </button>
-                    )}
-
-                    <button
-                      type="button"
-                      className="ks-btn ks-btn--ghost"
-                      style={{ width: "100%", justifyContent: "center" }}
-                      onClick={() => setShowInviteModal(false)}
-                    >
-                      Close
-                    </button>
-                  </div>
-                </>
               )}
-            </div>
-          </div>
-        </div>
-      )}
 
-      {/* Remove Admin Modal */}
-      {showRemoveAdminModal && targetAdmin && (
-        <div className="ks-modal-overlay" onMouseDown={() => setShowRemoveAdminModal(false)}>
-          <div
-            className="ks-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Remove Administrator"
-            onMouseDown={(e) => e.stopPropagation()}
-          >
-            <div className="ks-modal__head">
-              <span className="ks-modal__icon" style={{ background: "rgba(239, 68, 68, 0.15)", color: "#ef4444" }}>
-                <Trash2 size={16} strokeWidth={2} />
-              </span>
-              <h2>Remove Administrator</h2>
-              <button
-                type="button"
-                className="ks-modal__close"
-                onClick={() => setShowRemoveAdminModal(false)}
-                aria-label="Close"
-              >
-                <X size={16} strokeWidth={2} />
-              </button>
-            </div>
+              {/* Expiration Countdown Timer */}
+              <div style={{ margin: "16px 0 12px", display: "inline-flex", alignItems: "center", gap: 6, background: "rgba(239, 68, 68, 0.12)", border: "1px solid rgba(239, 68, 68, 0.3)", padding: "6px 14px", borderRadius: 999, color: "#f87171", fontSize: 13, fontWeight: 700 }}>
+                <Clock size={14} />
+                <span>
+                  Expires in: {Math.floor(inviteTimeLeft / 60).toString().padStart(2, "0")}:{(inviteTimeLeft % 60).toString().padStart(2, "0")}
+                </span>
+              </div>
 
-            <div className="ks-modal__body">
-              <p style={{ margin: 0, fontSize: 13.5, color: "var(--text)" }}>
-                Are you sure you want to remove <strong>{targetAdmin.name}</strong> ({targetAdmin.email}) as an administrator?
-              </p>
-              <p style={{ margin: 0, fontSize: 12, color: "var(--muted)" }}>
-                This user will lose control room access immediately.
-              </p>
-
-              {removeAdminError && (
-                <p style={{ margin: "6px 0 0", fontSize: 12.5, color: "#fca5a5", background: "rgba(220,38,38,0.15)", padding: "8px 10px", borderRadius: 6, border: "1px solid rgba(220,38,38,0.3)" }}>
-                  Error: {removeAdminError}
-                </p>
+              {inviteTimeLeft <= 0 && (
+                <div style={{ color: "#ef4444", fontSize: 12, fontWeight: 600, marginBottom: 8 }}>
+                  This invitation link has expired. Please generate a new one.
+                </div>
               )}
+
+              {/* Unique Invitation URL Display */}
+              <div style={{ background: "rgba(15, 23, 42, 0.6)", border: "1px solid rgba(255, 255, 255, 0.1)", padding: "8px 12px", borderRadius: 8, fontSize: 12, wordBreak: "break-all", color: "#38bdf8", fontFamily: "monospace", margin: "8px 0 16px" }}>
+                {inviteUrl}
+              </div>
             </div>
 
-            <div className="ks-modal__foot">
+            <div className="pa-modal__actions" style={{ justifyContent: "center", gap: 12 }}>
               <button
                 type="button"
-                className="ks-btn ks-btn--ghost"
-                onClick={() => setShowRemoveAdminModal(false)}
-                disabled={removingAdmin}
+                className="pa-btn pa-btn--primary"
+                onClick={handleShareInviteUrl}
+                disabled={inviteTimeLeft <= 0}
               >
-                Cancel
+                <Share2 size={14} />
+                <span>Share Link</span>
               </button>
+
               <button
                 type="button"
-                className="ks-btn ks-btn--danger"
-                onClick={handleConfirmRemoveAdmin}
-                disabled={removingAdmin}
+                className="pa-btn pa-btn--ghost"
+                onClick={handleCopyInviteUrl}
+                disabled={inviteTimeLeft <= 0}
               >
-                {removingAdmin ? "Removing…" : "Confirm Remove"}
+                <Copy size={14} />
+                <span>{inviteCopied ? "Copied!" : "Copy Link"}</span>
+              </button>
+
+              <button
+                type="button"
+                className="pa-btn pa-btn--ghost"
+                onClick={() => setShowInviteModal(false)}
+              >
+                Close
               </button>
             </div>
           </div>
