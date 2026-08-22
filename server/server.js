@@ -2,6 +2,7 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const supabase = require("./supabaseClient");
+const invitationStore = require("./invitationStore");
 
 const app = express();
 
@@ -414,6 +415,161 @@ app.delete("/alerts/:id", requireAdmin, async (req, res) => {
   }
 });
 
+/* ------------------------------------------------------------------ *
+ * Admin Management Routes
+ * ------------------------------------------------------------------ */
+
+app.get("/admins", requireAdmin, async (req, res) => {
+  try {
+    const { data: adminRows, error: adminErr } = await supabase
+      .from("admins")
+      .select("user_id, email, created_at")
+      .order("created_at", { ascending: true });
+
+    if (adminErr) {
+      return failFromDatabase(res, "GET /admins", adminErr, "Database error");
+    }
+
+    let authUsersMap = new Map();
+    try {
+      const { data: userData } = await supabase.auth.admin.listUsers();
+      if (userData?.users) {
+        for (const u of userData.users) {
+          authUsersMap.set(u.id, u);
+        }
+      }
+    } catch (e) {
+      console.warn("[GET /admins] listUsers fallback:", e?.message);
+    }
+
+    const admins = (adminRows || []).map((row) => {
+      const authUser = authUsersMap.get(row.user_id);
+      const meta = authUser?.user_metadata || {};
+      const name = meta.full_name || meta.name || row.email.split("@")[0] || "Administrator";
+      return {
+        user_id: row.user_id,
+        email: row.email,
+        name,
+        created_at: row.created_at,
+        provider: authUser?.app_metadata?.provider || "email",
+      };
+    });
+
+    return res.json(admins);
+  } catch (err) {
+    return failFromDatabase(res, "GET /admins", err, "Server error");
+  }
+});
+
+app.post("/admins", requireAdmin, async (req, res) => {
+  const { name, email, password } = req.body || {};
+
+  if (!name || typeof name !== "string" || !name.trim()) {
+    return fail(res, 400, "Administrator name is required", "VALIDATION_ERROR");
+  }
+
+  if (!email || typeof email !== "string" || !email.includes("@")) {
+    return fail(res, 400, "A valid email address is required", "VALIDATION_ERROR");
+  }
+
+  if (!password || typeof password !== "string" || password.length < 6) {
+    return fail(res, 400, "Password must be at least 6 characters long", "VALIDATION_ERROR");
+  }
+
+  const cleanName = name.trim();
+  const cleanEmail = email.trim().toLowerCase();
+
+  try {
+    const { data: createData, error: createErr } = await supabase.auth.admin.createUser({
+      email: cleanEmail,
+      password,
+      email_confirm: true,
+      user_metadata: { full_name: cleanName, name: cleanName },
+    });
+
+    if (createErr) {
+      return fail(
+        res,
+        400,
+        createErr.message || "Could not create user account in Supabase Auth",
+        "AUTH_ERROR"
+      );
+    }
+
+    const userId = createData.user.id;
+
+    const { error: insertErr } = await supabase.from("admins").insert({
+      user_id: userId,
+      email: cleanEmail,
+    });
+
+    if (insertErr) {
+      return failFromDatabase(res, "POST /admins insert", insertErr, "Database error");
+    }
+
+    return res.json({
+      success: true,
+      admin: {
+        user_id: userId,
+        email: cleanEmail,
+        name: cleanName,
+        created_at: new Date().toISOString(),
+      },
+    });
+  } catch (err) {
+    return failFromDatabase(res, "POST /admins", err, "Server error");
+  }
+});
+
+app.delete("/admins/:id", requireAdmin, async (req, res) => {
+  const { id } = req.params;
+
+  if (!UUID_PATTERN.test(id)) {
+    return fail(res, 400, "Invalid administrator id", "VALIDATION_ERROR");
+  }
+
+  try {
+    const { count, error: countErr } = await supabase
+      .from("admins")
+      .select("user_id", { count: "exact", head: true });
+
+    if (countErr) {
+      return failFromDatabase(res, "DELETE /admins count", countErr, "Database error");
+    }
+
+    if (count <= 1) {
+      return fail(
+        res,
+        400,
+        "Cannot remove the last remaining administrator account.",
+        "FORBIDDEN"
+      );
+    }
+
+    const { error: deleteRowErr } = await supabase
+      .from("admins")
+      .delete()
+      .eq("user_id", id);
+
+    if (deleteRowErr) {
+      return failFromDatabase(res, "DELETE /admins row", deleteRowErr, "Database error");
+    }
+
+    try {
+      await supabase.auth.admin.deleteUser(id);
+    } catch (e) {
+      console.warn("[DELETE /admins] auth deleteUser warning:", e?.message);
+    }
+
+    return res.json({
+      success: true,
+      message: "Administrator removed successfully",
+    });
+  } catch (err) {
+    return failFromDatabase(res, "DELETE /admins", err, "Server error");
+  }
+});
+
 // Polled by the person who raised the alert, to learn when it was closed.
 app.get("/alert-status/:phone", requireUser, async (req, res) => {
   const phone = readText(req.params.phone, "phone", MAX_PHONE_LENGTH);
@@ -461,6 +617,169 @@ app.use((err, req, res, next) => {
 
   console.error("[unhandled]", err);
   fail(res, 500, "Unexpected server error", "INTERNAL_ERROR");
+});
+
+/* ------------------------------------------------------------------ *
+ * Admin Invitation & Request Routes
+ * ------------------------------------------------------------------ */
+
+app.post("/admin-invitations/generate", requireAdmin, async (req, res) => {
+  try {
+    const invitation = invitationStore.createInvitation(req.authUser?.id);
+    return res.json({ success: true, invitation });
+  } catch (err) {
+    return fail(res, 500, "Could not generate admin invitation", "SERVER_ERROR");
+  }
+});
+
+app.get("/admin-invitations/verify/:token", async (req, res) => {
+  const { token } = req.params;
+  try {
+    const result = invitationStore.getInvitation(token);
+    return res.json(result);
+  } catch (err) {
+    return res.json({ valid: false, error: "VERIFICATION_FAILED" });
+  }
+});
+
+app.post("/admin-invitations/submit-request", async (req, res) => {
+  const { token, name, email, password } = req.body || {};
+
+  if (!token || typeof token !== "string") {
+    return fail(res, 400, "Invitation token is required", "VALIDATION_ERROR");
+  }
+
+  if (!name || typeof name !== "string" || !name.trim()) {
+    return fail(res, 400, "Full Name is required", "VALIDATION_ERROR");
+  }
+
+  if (!email || typeof email !== "string" || !email.includes("@")) {
+    return fail(res, 400, "A valid email address is required", "VALIDATION_ERROR");
+  }
+
+  if (!password || typeof password !== "string" || password.length < 6) {
+    return fail(res, 400, "Password must be at least 6 characters long", "VALIDATION_ERROR");
+  }
+
+  try {
+    const result = invitationStore.submitRequest(token, name, email, password);
+
+    if (!result.success) {
+      const errMap = {
+        INVITATION_EXPIRED: "This invitation has expired (valid for 5 minutes). Ask an administrator to generate a new QR code invitation.",
+        INVITATION_ALREADY_USED: "This invitation has already been used.",
+        INVITATION_NOT_FOUND: "Invalid invitation token.",
+      };
+      return fail(
+        res,
+        400,
+        errMap[result.error] || "Invalid or expired invitation token.",
+        result.error
+      );
+    }
+
+    return res.json({
+      success: true,
+      message: "Admin request submitted successfully. An existing administrator must approve your request before you can log in.",
+    });
+  } catch (err) {
+    return fail(res, 500, "Could not submit admin request", "SERVER_ERROR");
+  }
+});
+
+app.get("/admin-requests", requireAdmin, async (req, res) => {
+  try {
+    const requests = invitationStore.getPendingRequests();
+    return res.json(requests);
+  } catch (err) {
+    return fail(res, 500, "Could not fetch pending admin requests", "SERVER_ERROR");
+  }
+});
+
+app.post("/admin-requests/:id/approve", requireAdmin, async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const pendingReq = invitationStore.getRequestById(id);
+
+    if (!pendingReq || pendingReq.status !== "pending") {
+      return fail(res, 404, "Pending admin request not found", "NOT_FOUND");
+    }
+
+    // Create user in Supabase Auth using the requested credentials
+    const { data: createData, error: createErr } = await supabase.auth.admin.createUser({
+      email: pendingReq.email,
+      password: pendingReq.plain_password,
+      email_confirm: true,
+      user_metadata: { full_name: pendingReq.name, name: pendingReq.name },
+    });
+
+    if (createErr && !createErr.message?.includes("already been registered")) {
+      return fail(
+        res,
+        400,
+        createErr.message || "Could not create user account in Supabase Auth",
+        "AUTH_ERROR"
+      );
+    }
+
+    let userId = createData?.user?.id;
+
+    // If user already exists in auth, look up user ID from listUsers
+    if (!userId) {
+      const { data: listData } = await supabase.auth.admin.listUsers();
+      const existingUser = listData?.users?.find(
+        (u) => u.email?.toLowerCase() === pendingReq.email.toLowerCase()
+      );
+      if (existingUser) {
+        userId = existingUser.id;
+      }
+    }
+
+    if (!userId) {
+      return fail(res, 500, "Could not locate user ID for admin account", "SERVER_ERROR");
+    }
+
+    // Insert user into public.admins table
+    const { error: insertErr } = await supabase.from("admins").insert({
+      user_id: userId,
+      email: pendingReq.email,
+    });
+
+    if (insertErr && !insertErr.message?.includes("duplicate key")) {
+      return failFromDatabase(res, "POST /admin-requests/:id/approve insert", insertErr, "Database error");
+    }
+
+    invitationStore.updateRequestStatus(id, "approved");
+
+    return res.json({
+      success: true,
+      message: `${pendingReq.name} (${pendingReq.email}) has been approved as an administrator.`,
+    });
+  } catch (err) {
+    return fail(res, 500, "Could not approve admin request", "SERVER_ERROR");
+  }
+});
+
+app.post("/admin-requests/:id/reject", requireAdmin, async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const pendingReq = invitationStore.getRequestById(id);
+
+    if (!pendingReq || pendingReq.status !== "pending") {
+      return fail(res, 404, "Pending admin request not found", "NOT_FOUND");
+    }
+
+    invitationStore.updateRequestStatus(id, "rejected");
+
+    return res.json({
+      success: true,
+      message: `Admin request for ${pendingReq.email} has been rejected.`,
+    });
+  } catch (err) {
+    return fail(res, 500, "Could not reject admin request", "SERVER_ERROR");
+  }
 });
 
 async function checkDatabase() {
