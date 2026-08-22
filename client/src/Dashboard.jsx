@@ -273,9 +273,11 @@ export default function Dashboard({ focus = "active" }) {
   const [inviteUrl, setInviteUrl] = useState("");
   const [qrDataUrl, setQrDataUrl] = useState("");
   const [inviteExpiresAt, setInviteExpiresAt] = useState(null);
+  const [inviteCreatedAt, setInviteCreatedAt] = useState(null);
   const [inviteTimeLeft, setInviteTimeLeft] = useState(300);
   const [inviteLoading, setInviteLoading] = useState(false);
   const [inviteCopied, setInviteCopied] = useState(false);
+  const inviteReceivedAtRef = useRef(null);
 
   const [clearingHistory, setClearingHistory] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -504,15 +506,20 @@ export default function Dashboard({ focus = "active" }) {
       const expiresAt = Number(
         res?.expiresAt || res?.expires_at || res?.invitation?.expires_at || res?.invitation?.expiresAt
       );
+      const createdAtRaw = res?.createdAt || res?.created_at || res?.invitation?.created_at;
+      const createdAt = createdAtRaw ? new Date(createdAtRaw).getTime() : expiresAt - 300000;
 
       if (res?.success && token && Number.isFinite(expiresAt)) {
+        inviteReceivedAtRef.current = Date.now();
         setInviteToken(token);
         const baseUrl = getFrontendBaseUrl();
         const fullUrl = `${baseUrl}/admin/invite/${token}`;
         setInviteUrl(fullUrl);
         setInviteExpiresAt(expiresAt);
+        setInviteCreatedAt(createdAt);
 
-        const initialRemaining = Math.max(0, Math.floor((expiresAt - Date.now()) / 1000));
+        // Always starts capped at 300 seconds (05:00) at moment of creation
+        const initialRemaining = Math.min(300, Math.max(0, Math.floor((expiresAt - createdAt) / 1000)));
         setInviteTimeLeft(initialRemaining);
 
         const qr = await QRCode.toDataURL(fullUrl, {
@@ -538,11 +545,16 @@ export default function Dashboard({ focus = "active" }) {
     }
 
     const expiresAtMs = Number(inviteExpiresAt);
+    const createdAtMs = Number(inviteCreatedAt || (expiresAtMs - 300000));
+    const receivedAtMs = inviteReceivedAtRef.current || Date.now();
+    const totalDurationMs = Math.min(300000, Math.max(0, expiresAtMs - createdAtMs));
 
     const updateTimer = () => {
-      const remaining = Math.max(0, Math.floor((expiresAtMs - Date.now()) / 1000));
-      setInviteTimeLeft(remaining);
-      return remaining;
+      const elapsedMs = Date.now() - receivedAtMs;
+      const remainingMs = totalDurationMs - elapsedMs;
+      const remainingSeconds = Math.min(300, Math.max(0, Math.floor(remainingMs / 1000)));
+      setInviteTimeLeft(remainingSeconds);
+      return remainingSeconds;
     };
 
     updateTimer();
@@ -555,7 +567,7 @@ export default function Dashboard({ focus = "active" }) {
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [showInviteModal, inviteExpiresAt]);
+  }, [showInviteModal, inviteExpiresAt, inviteCreatedAt]);
 
   const handleCopyInviteUrl = async () => {
     try {
