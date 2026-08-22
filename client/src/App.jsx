@@ -116,6 +116,33 @@ export default function App() {
       />
 
       <Route
+        path="/active-sos"
+        element={
+          <RequireAdmin>
+            <Dashboard focus="active" />
+          </RequireAdmin>
+        }
+      />
+
+      <Route
+        path="/admins"
+        element={
+          <RequireAdmin>
+            <Dashboard focus="admins" />
+          </RequireAdmin>
+        }
+      />
+
+      <Route
+        path="/history"
+        element={
+          <RequireAdmin>
+            <Dashboard focus="history" />
+          </RequireAdmin>
+        }
+      />
+
+      <Route
         path="/map"
         element={
           <RequireAdmin>

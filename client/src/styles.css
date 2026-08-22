@@ -1,5 +1,5 @@
-﻿/* ==========================================================================
-   Parashu ΓÇö Emergency Command Center design system
+/* ==========================================================================
+   Parashu — Emergency Command Center design system
    ========================================================================== */
 
 :root {
@@ -116,7 +116,7 @@ a { color: inherit; }
 }
 
 /* ==========================================================================
-   Command shell ΓÇö sidebar + topbar
+   Command shell — sidebar + topbar
    ========================================================================== */
 
 .ks-shell { min-height: 100vh; display: flex; align-items: stretch; }
@@ -539,7 +539,7 @@ a { color: inherit; }
 .ks-stat__meta { margin: 4px 0 0; font-size: 11px; color: var(--faint); }
 
 /* ==========================================================================
-   Dashboard ΓÇö feed + map split
+   Dashboard — feed + map split
    ========================================================================== */
 
 .ks-split { display: grid; grid-template-columns: 6fr 4fr; gap: 16px; align-items: start; }
@@ -1355,7 +1355,7 @@ a { color: inherit; }
 .ks-toggle.is-on::after { transform: translateX(16px); }
 
 /* ==========================================================================
-   Home ΓÇö victim console
+   Home — victim console
    ========================================================================== */
 
 .ks-home { min-height: 100vh; display: flex; flex-direction: column; position: relative; overflow: hidden; }
@@ -1457,7 +1457,7 @@ a { color: inherit; }
 }
 
 /* ==========================================================================
-   Voice Protection ΓÇö the primary feature card
+   Voice Protection — the primary feature card
    ========================================================================== */
 
 .ks-voicecard {
@@ -1673,7 +1673,7 @@ a { color: inherit; }
 }
 
 /* ==========================================================================
-   Login ΓÇö operator sign in
+   Login — operator sign in
    ========================================================================== */
 
 .ks-auth { min-height: 100vh; display: grid; grid-template-columns: 1.05fr 1fr; background: var(--bg); }
@@ -2537,7 +2537,7 @@ a { color: inherit; }
 .ks-phonerow .ks-searchwrap { flex: 1 1 220px; }
 
 /* ==========================================================================
-   Login ΓÇö two clearly separated sign-in systems on one page
+   Login — two clearly separated sign-in systems on one page
    ========================================================================== */
 
 .ks-authcard {
@@ -2791,4 +2791,155 @@ a { color: inherit; }
     width: 100%;
     justify-content: center;
   }
+}
+
+/* ==========================================================================
+   Audio Autoplay Notice Banner
+   ========================================================================== */
+
+.pa-audio-notice-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 18px;
+  margin-bottom: 20px;
+  border-radius: 12px;
+  background: rgba(234, 179, 8, 0.12);
+  border: 1px solid rgba(234, 179, 8, 0.35);
+  color: #fde047;
+  font-size: 13px;
+  animation: paRise 0.3s ease-out;
+}
+
+.pa-audio-notice-text {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 500;
+}
+
+/* ==========================================================================
+   Nearby Emergency Medical Facilities / Hospitals Box
+   ========================================================================== */
+
+.pa-nearby-hospitals-box {
+  margin: 16px 0;
+  padding: 16px;
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(56, 189, 248, 0.2);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+}
+
+.pa-nearby-hospitals-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.pa-hospitals-title {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #f8fafc;
+}
+
+.pa-hospitals-subtitle {
+  font-size: 11.5px;
+  color: #94a3b8;
+}
+
+.pa-hospitals-status {
+  font-size: 12.5px;
+  color: #94a3b8;
+  padding: 8px 0;
+}
+
+.pa-hospitals-error {
+  color: #f87171;
+}
+
+.pa-hospitals-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pa-hospital-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: all 0.2s ease;
+}
+
+.pa-hospital-card:hover {
+  border-color: rgba(56, 189, 248, 0.35);
+  background: rgba(15, 23, 42, 0.95);
+}
+
+.pa-hospital-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.pa-hospital-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: #38bdf8;
+  line-height: 1.3;
+}
+
+.pa-hospital-addr {
+  font-size: 11.5px;
+  color: #94a3b8;
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pa-hospital-phone {
+  font-size: 11.5px;
+  color: #4ade80;
+  font-weight: 600;
+  margin-top: 3px;
+}
+
+.pa-hospital-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.pa-hospital-dist {
+  display: inline-block;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: rgba(56, 189, 248, 0.14);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  color: #38bdf8;
+  font-size: 11.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.pa-hospital-map-link {
+  font-size: 11px;
+  color: #94a3b8;
+  text-decoration: underline;
+  transition: color 0.15s ease;
+}
+
+.pa-hospital-map-link:hover {
+  color: #38bdf8;
 }
