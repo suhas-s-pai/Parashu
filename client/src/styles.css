@@ -2714,7 +2714,10 @@ a { color: inherit; }
     overflow-x: hidden;
   }
 
-  .pa-sidebar {
+  /* Drawer behaviour belongs to the .pa-shell layout, which pairs it with a
+     menu button. Scoped so the control-room rail, which has no such button,
+     is not slid off screen with no way to bring it back. */
+  .pa-shell .pa-sidebar {
     position: fixed;
     top: 0;
     left: 0;
@@ -2726,7 +2729,7 @@ a { color: inherit; }
     box-shadow: var(--shadow-lg);
   }
 
-  .pa-sidebar.is-open {
+  .pa-shell .pa-sidebar.is-open {
     transform: translateX(0);
   }
 
@@ -2942,4 +2945,544 @@ a { color: inherit; }
 
 .pa-hospital-map-link:hover {
   color: #38bdf8;
+}
+
+/* ==========================================================================
+   Control room shell — sidebar, command bar and page frame
+   ========================================================================== */
+
+.pa-dashboard-page {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 272px 1fr;
+  background: radial-gradient(1200px 600px at 20% -10%, rgba(37, 99, 235, 0.08), transparent 60%),
+    linear-gradient(160deg, #0b1220 0%, #070d18 100%);
+  color: var(--text);
+}
+
+.pa-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+  padding: 22px 16px;
+  border-right: 1px solid var(--line);
+  background: rgba(2, 6, 23, 0.55);
+}
+
+.pa-sidebar__brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 6px;
+}
+
+.pa-sidebar__mark {
+  width: 40px;
+  height: 40px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 13px;
+  border: 1px solid rgba(220, 38, 38, 0.34);
+  background: rgba(220, 38, 38, 0.16);
+}
+
+.pa-sidebar__mark img {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+}
+
+.pa-sidebar__title {
+  display: block;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--text);
+}
+
+.pa-sidebar__sub {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.pa-sidebar__nav {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* The rail reuses .pa-nav-item; only the sizing and the active treatment are
+   restated so the highlight matches the command bar accent. */
+.pa-sidebar__nav .pa-nav-item {
+  font-size: 14px;
+  font-weight: 500;
+  border-radius: 13px;
+}
+
+.pa-sidebar__nav .pa-nav-item.is-active {
+  background: rgba(37, 99, 235, 0.18);
+  border-color: rgba(37, 99, 235, 0.34);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.pa-badge {
+  margin-left: auto;
+  min-width: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.18);
+  color: var(--text-2);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 20px;
+  text-align: center;
+}
+
+.pa-badge--danger {
+  background: var(--emergency);
+  color: #fff;
+}
+
+.pa-sidebar__foot {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pa-sidebar__user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(148, 163, 184, 0.06);
+}
+
+.pa-sidebar__avatar {
+  width: 32px;
+  height: 32px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: rgba(37, 99, 235, 0.18);
+  color: #93c5fd;
+}
+
+.pa-user-info {
+  min-width: 0;
+}
+
+.pa-user-name,
+.pa-user-email {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pa-user-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.pa-user-email {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.pa-logout {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+}
+
+.pa-logout:hover {
+  background: rgba(220, 38, 38, 0.12);
+  border-color: rgba(220, 38, 38, 0.3);
+  color: #fca5a5;
+}
+
+.pa-main {
+  min-width: 0;
+  padding: 26px 30px 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.pa-topbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0;
+}
+
+.pa-topbar__heading h1 {
+  margin: 4px 0 0;
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.pa-topbar__meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.pa-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.06);
+  color: var(--text-2);
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+
+.pa-chip--danger {
+  border-color: rgba(220, 38, 38, 0.3);
+  background: rgba(220, 38, 38, 0.12);
+  color: #fca5a5;
+}
+
+.pa-chip--toggle {
+  cursor: pointer;
+  transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+}
+
+.pa-chip--toggle.is-on {
+  border-color: rgba(37, 99, 235, 0.34);
+  background: rgba(37, 99, 235, 0.14);
+  color: #bfdbfe;
+}
+
+.pa-dashboard-content {
+  min-width: 0;
+}
+
+/* ==========================================================================
+   Admin portal — access control
+   ========================================================================== */
+
+.pa-adm {
+  display: flex;
+  flex-direction: column;
+  gap: 30px;
+}
+
+.pa-adm__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.pa-adm__head h2 {
+  margin: 4px 0 0;
+  font-size: 21px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+}
+
+.pa-adm__add {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 12px 20px;
+  border: 1px solid rgba(37, 99, 235, 0.5);
+  border-radius: 999px;
+  background: rgba(37, 99, 235, 0.9);
+  color: #fff;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.18s ease, transform 0.18s ease;
+}
+
+.pa-adm__add:hover:not(:disabled) {
+  background: #2563eb;
+  transform: translateY(-1px);
+}
+
+.pa-adm__add:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.pa-adm__error {
+  padding: 11px 15px;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 12px;
+  background: rgba(239, 68, 68, 0.12);
+  color: #fca5a5;
+  font-size: 13px;
+}
+
+.pa-adm__group {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.pa-adm__grouptitle {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.pa-adm__groupicon--warn {
+  color: var(--warning);
+}
+
+.pa-adm__groupicon--info {
+  color: #60a5fa;
+}
+
+.pa-adm__list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.pa-adm__empty {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 22px 20px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 16px;
+  background: rgba(2, 6, 23, 0.4);
+  color: var(--muted);
+}
+
+.pa-adm__empty p {
+  margin: 0;
+  font-size: 13px;
+}
+
+.pa-adm__row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(15, 23, 42, 0.55);
+  transition: background 0.18s ease, border-color 0.18s ease;
+}
+
+.pa-adm__row:hover {
+  border-color: var(--line-strong);
+  background: rgba(15, 23, 42, 0.78);
+}
+
+/* The amber rail marks a row that is still waiting on a decision. */
+.pa-adm__row--pending {
+  border-left: 3px solid var(--warning);
+  border-radius: 4px 16px 16px 4px;
+}
+
+.pa-adm__avatar {
+  width: 42px;
+  height: 42px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.pa-adm__avatar--warn {
+  background: linear-gradient(140deg, #f59e0b, #ea580c);
+}
+
+.pa-adm__avatar--info {
+  background: linear-gradient(140deg, #3b82f6, #1d4ed8);
+}
+
+.pa-adm__ident {
+  min-width: 0;
+  flex: 1;
+}
+
+.pa-adm__nameline {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.pa-adm__nameline strong {
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.pa-adm__tag {
+  padding: 3px 9px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.1);
+  color: var(--text-2);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.pa-adm__tag--warn {
+  border-color: rgba(245, 158, 11, 0.36);
+  background: rgba(245, 158, 11, 0.14);
+  color: #fbbf24;
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.pa-adm__sub {
+  margin: 5px 0 0;
+  font-size: 12.5px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pa-adm__dot {
+  margin: 0 7px;
+  color: var(--faint);
+}
+
+.pa-adm__actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+  margin-left: auto;
+}
+
+.pa-adm__stamp {
+  padding: 7px 13px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.07);
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.pa-adm__act {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 15px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.06);
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+}
+
+.pa-adm__act--approve {
+  border-color: rgba(22, 163, 74, 0.36);
+  background: rgba(22, 163, 74, 0.14);
+  color: #86efac;
+}
+
+.pa-adm__act--approve:hover {
+  background: rgba(22, 163, 74, 0.24);
+}
+
+.pa-adm__act--reject,
+.pa-adm__act--remove {
+  border-color: rgba(239, 68, 68, 0.32);
+  background: rgba(239, 68, 68, 0.12);
+  color: #fca5a5;
+}
+
+.pa-adm__act--reject:hover,
+.pa-adm__act--remove:hover {
+  background: rgba(239, 68, 68, 0.22);
+}
+
+@media (max-width: 1080px) {
+  .pa-dashboard-page {
+    grid-template-columns: 1fr;
+  }
+
+  .pa-sidebar {
+    border-right: none;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .pa-sidebar__foot {
+    margin-top: 0;
+  }
+}
+
+@media (max-width: 760px) {
+  .pa-main {
+    padding: 18px 16px 32px;
+  }
+
+  .pa-topbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .pa-topbar__meta {
+    justify-content: flex-start;
+  }
+
+  .pa-adm__head {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .pa-adm__row {
+    flex-wrap: wrap;
+  }
+
+  .pa-adm__ident {
+    flex: 1 1 160px;
+  }
+
+  .pa-adm__actions {
+    width: 100%;
+    margin-left: 0;
+    justify-content: flex-start;
+  }
 }

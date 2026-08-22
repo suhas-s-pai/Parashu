@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import QRCode from "qrcode";
 import { useAuth } from "./lib/authContext";
 import {
@@ -51,6 +52,28 @@ import {
   Volume2,
   X,
 } from "lucide-react";
+
+// Avatar monogram for an administrator or a pending request. The name is
+// preferred over the email so the tile matches the label beside it.
+function initialOf(name, email) {
+  const source = String(name || email || "").trim();
+  return source ? source[0].toUpperCase() : "?";
+}
+
+// Supabase user ids are full UUIDs. The row only needs enough of one to tell
+// two accounts apart, so it is truncated rather than wrapped.
+function shortId(userId) {
+  const value = String(userId || "");
+  return value.length > 8 ? `${value.slice(0, 8)}…` : value || "—";
+}
+
+// The command-center header names the view rather than the product, so the
+// operator can tell at a glance which console they are looking at.
+const PAGE_TITLES = {
+  active: "Active SOS",
+  history: "History",
+  admins: "Admins",
+};
 
 function getDistanceKm(lat1, lon1, lat2, lon2) {
   const R = 6371;
@@ -232,8 +255,9 @@ function LiveMap({ alert }) {
   );
 }
 
-export default function Dashboard() {
+export default function Dashboard({ focus = "active" }) {
   const { user, signOut } = useAuth();
+  const navigate = useNavigate();
   const { prefs, togglePref } = usePrefs();
 
   const [activeAlerts, setActiveAlerts] = useState([]);
@@ -241,7 +265,7 @@ export default function Dashboard() {
   const [addresses, setAddresses] = useState({});
   const [selectedId, setSelectedId] = useState(null);
 
-  const [tab, setTab] = useState("active");
+  const [tab, setTab] = useState(focus);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusMessage, setStatusMessage] = useState("Connecting to emergency stream…");
 
@@ -463,6 +487,13 @@ export default function Dashboard() {
       setAdminsLoading(false);
     }
   }, []);
+
+  // /alerts, /history and /admins render this same component, so a route
+  // change swaps the prop instead of remounting. Without this the operator
+  // would stay on whichever tab they were already looking at.
+  useEffect(() => {
+    setTab(focus);
+  }, [focus]);
 
   useEffect(() => {
     if (tab === "admins") {
@@ -882,72 +913,72 @@ export default function Dashboard() {
   );
 
   const renderAdminsView = () => (
-    <section className="pa-history-panel">
-      <div className="pa-panel-head">
+    <section className="pa-adm">
+      <div className="pa-adm__head">
         <div>
-          <p className="pa-kicker">Administration</p>
-          <h2>Admin Management</h2>
+          <p className="pa-kicker">Access control</p>
+          <h2>Administrator Management</h2>
         </div>
         <button
           type="button"
-          className="pa-btn pa-btn--primary"
+          className="pa-adm__add"
           onClick={handleGenerateInvitation}
           disabled={inviteLoading}
         >
-          <UserPlus size={15} />
-          <span>{inviteLoading ? "Generating QR…" : "Invite New Admin"}</span>
+          <QrCode size={16} strokeWidth={1.9} />
+          <span>{inviteLoading ? "Generating QR…" : "Add New Admin"}</span>
         </button>
       </div>
 
-      {adminsError && (
-        <div style={{ margin: "12px 0 0", padding: "10px 14px", borderRadius: 8, background: "rgba(239, 68, 68, 0.12)", border: "1px solid rgba(239, 68, 68, 0.3)", color: "#f87171", fontSize: 13 }}>
-          {adminsError}
-        </div>
-      )}
+      {adminsError && <div className="pa-adm__error">{adminsError}</div>}
 
-      {/* Pending Admin Requests Section */}
-      <div style={{ margin: "24px 0 32px" }}>
-        <h3 style={{ fontSize: 15, fontWeight: 700, margin: "0 0 12px", color: "#f8fafc", display: "flex", alignItems: "center", gap: 8 }}>
-          <span>Pending Admin Access Requests</span>
-          {adminRequests.length > 0 && (
-            <span className="pa-pill pa-pill--pending-status" style={{ fontSize: 11 }}>
-              {adminRequests.length} Pending
-            </span>
-          )}
+      <div className="pa-adm__group">
+        <h3 className="pa-adm__grouptitle">
+          <Clock size={16} strokeWidth={2} className="pa-adm__groupicon pa-adm__groupicon--warn" />
+          Pending Admin Requests ({adminRequests.length})
         </h3>
 
         {adminRequests.length === 0 ? (
-          <div className="pa-empty-card" style={{ padding: "24px 16px" }}>
-            <CheckCircle2 size={20} />
-            <p style={{ margin: 0 }}>No pending admin requests at this time.</p>
+          <div className="pa-adm__empty">
+            <CheckCircle2 size={18} strokeWidth={1.9} />
+            <p>No pending admin requests at this time.</p>
           </div>
         ) : (
-          <div className="pa-history-list">
+          <div className="pa-adm__list">
             {adminRequests.map((req) => (
-              <article key={req.id} className="pa-history-card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <div>
-                  <h3 style={{ fontSize: 14, fontWeight: 700, margin: "0 0 4px", color: "#f8fafc" }}>{req.fullName}</h3>
-                  <p style={{ margin: 0, fontSize: 12, color: "#94a3b8" }}>{req.email}</p>
-                  <span className="pa-meta-line" style={{ fontSize: 11, color: "#64748b" }}>
-                    Requested {formatTime(req.requestedAt)}
-                  </span>
+              <article key={req.id} className="pa-adm__row pa-adm__row--pending">
+                <span className="pa-adm__avatar pa-adm__avatar--warn">
+                  {initialOf(req.name, req.email)}
+                </span>
+
+                <div className="pa-adm__ident">
+                  <div className="pa-adm__nameline">
+                    <strong>{req.name || "Unnamed request"}</strong>
+                    <span className="pa-adm__tag pa-adm__tag--warn">Pending approval</span>
+                  </div>
+                  <p className="pa-adm__sub">
+                    {req.email}
+                    <span className="pa-adm__dot">·</span>
+                    Requested {formatTime(req.created_at)}
+                  </p>
                 </div>
-                <div style={{ display: "flex", gap: 8 }}>
+
+                <div className="pa-adm__actions">
                   <button
                     type="button"
-                    className="pa-btn pa-btn--success"
-                    style={{ height: 34, padding: "0 12px", fontSize: 12 }}
+                    className="pa-adm__act pa-adm__act--approve"
                     onClick={() => handleApproveRequest(req.id)}
                   >
-                    <Check size={14} /> Approve
+                    <Check size={15} strokeWidth={2.2} />
+                    <span>Approve</span>
                   </button>
                   <button
                     type="button"
-                    className="pa-btn pa-btn--danger"
-                    style={{ height: 34, padding: "0 12px", fontSize: 12 }}
+                    className="pa-adm__act pa-adm__act--reject"
                     onClick={() => handleRejectRequest(req.id)}
                   >
-                    <X size={14} /> Reject
+                    <X size={15} strokeWidth={2.2} />
+                    <span>Reject</span>
                   </button>
                 </div>
               </article>
@@ -956,45 +987,62 @@ export default function Dashboard() {
         )}
       </div>
 
-      {/* Active Administrators Section */}
-      <div>
-        <h3 style={{ fontSize: 15, fontWeight: 700, margin: "0 0 12px", color: "#f8fafc" }}>
+      <div className="pa-adm__group">
+        <h3 className="pa-adm__grouptitle">
+          <ShieldCheck size={16} strokeWidth={2} className="pa-adm__groupicon pa-adm__groupicon--info" />
           Active Administrators ({admins.length})
         </h3>
 
         {adminsLoading ? (
-          <div className="pa-empty-card">
-            <Clock size={20} />
+          <div className="pa-adm__empty">
+            <Clock size={18} strokeWidth={1.9} />
             <p>Loading admin directory…</p>
           </div>
+        ) : admins.length === 0 ? (
+          <div className="pa-adm__empty">
+            <ShieldAlert size={18} strokeWidth={1.9} />
+            <p>No administrators are registered yet.</p>
+          </div>
         ) : (
-          <div className="pa-history-list">
-            {admins.map((adm) => (
-              <article key={adm.id} className="pa-history-card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <div>
-                  <h3 style={{ fontSize: 14, fontWeight: 700, margin: "0 0 4px", color: "#f8fafc" }}>
-                    {adm.email || "Administrator"}
-                  </h3>
-                  <p style={{ margin: 0, fontSize: 12, color: "#94a3b8" }}>
-                    Role: {adm.role || "Admin"} · User ID: <span className="pa-mono">{adm.user_id}</span>
-                  </p>
-                  <span className="pa-meta-line" style={{ fontSize: 11, color: "#64748b" }}>
-                    Added {formatTime(adm.created_at)}
+          <div className="pa-adm__list">
+            {admins.map((adm) => {
+              const isSelf = adm.user_id === user?.id;
+
+              return (
+                <article key={adm.user_id} className="pa-adm__row">
+                  <span className="pa-adm__avatar pa-adm__avatar--info">
+                    {initialOf(adm.name, adm.email)}
                   </span>
-                </div>
-                {admins.length > 1 && (
-                  <button
-                    type="button"
-                    className="pa-btn pa-btn--ghost"
-                    style={{ height: 34, color: "#f87171", borderColor: "rgba(239, 68, 68, 0.3)" }}
-                    onClick={() => handleDeleteAdmin(adm.id, adm.email || adm.user_id)}
-                    title="Remove administrator"
-                  >
-                    <Trash2 size={14} /> Remove
-                  </button>
-                )}
-              </article>
-            ))}
+
+                  <div className="pa-adm__ident">
+                    <div className="pa-adm__nameline">
+                      <strong>{adm.name || adm.email || "Administrator"}</strong>
+                      {isSelf && <span className="pa-adm__tag">You</span>}
+                    </div>
+                    <p className="pa-adm__sub">
+                      {adm.email}
+                      <span className="pa-adm__dot">·</span>
+                      ID: <span className="pa-mono">{shortId(adm.user_id)}</span>
+                    </p>
+                  </div>
+
+                  <div className="pa-adm__actions">
+                    <span className="pa-adm__stamp">Added {formatTime(adm.created_at)}</span>
+                    {admins.length > 1 && (
+                      <button
+                        type="button"
+                        className="pa-adm__act pa-adm__act--remove"
+                        onClick={() => handleDeleteAdmin(adm.user_id, adm.email || adm.user_id)}
+                        title="Remove administrator"
+                      >
+                        <Trash2 size={15} strokeWidth={1.9} />
+                        <span>Remove</span>
+                      </button>
+                    )}
+                  </div>
+                </article>
+              );
+            })}
           </div>
         )}
       </div>
@@ -1005,11 +1053,11 @@ export default function Dashboard() {
     <div className="pa-dashboard-page">
       <aside className="pa-sidebar">
         <div className="pa-sidebar__brand">
-          <div className="pa-logo-circle">
-            <img src="/symbol.png" alt="Parashu Logo" />
-          </div>
+          <span className="pa-sidebar__mark">
+            <img src="/symbol.png" alt="" />
+          </span>
           <div>
-            <span className="pa-sidebar__title">PARASHU</span>
+            <span className="pa-sidebar__title">Parashu</span>
             <span className="pa-sidebar__sub">Control Room</span>
           </div>
         </div>
@@ -1020,10 +1068,10 @@ export default function Dashboard() {
             className={`pa-nav-item${tab === "active" ? " is-active" : ""}`}
             onClick={() => setTab("active")}
           >
-            <ShieldAlert size={16} />
+            <AlertTriangle size={17} strokeWidth={1.9} />
             <span>Active SOS</span>
             {activeAlerts.length > 0 && (
-              <span className="pa-badge">{activeAlerts.length}</span>
+              <span className="pa-badge pa-badge--danger">{activeAlerts.length}</span>
             )}
           </button>
 
@@ -1032,7 +1080,7 @@ export default function Dashboard() {
             className={`pa-nav-item${tab === "history" ? " is-active" : ""}`}
             onClick={() => setTab("history")}
           >
-            <History size={16} />
+            <History size={17} strokeWidth={1.9} />
             <span>History</span>
           </button>
 
@@ -1041,49 +1089,68 @@ export default function Dashboard() {
             className={`pa-nav-item${tab === "admins" ? " is-active" : ""}`}
             onClick={() => setTab("admins")}
           >
-            <UserRound size={16} />
+            <ShieldCheck size={17} strokeWidth={1.9} />
             <span>Admins</span>
             {adminRequests.length > 0 && (
-              <span className="pa-badge" style={{ background: "#ef4444", color: "#fff" }}>
-                {adminRequests.length}
-              </span>
+              <span className="pa-badge pa-badge--danger">{adminRequests.length}</span>
             )}
+          </button>
+
+          <button
+            type="button"
+            className="pa-nav-item"
+            onClick={() => navigate("/settings")}
+          >
+            <SettingsIcon size={17} strokeWidth={1.9} />
+            <span>Settings</span>
           </button>
         </nav>
 
-        <div className="pa-sidebar__user">
-          <div className="pa-user-info">
-            <span className="pa-user-email">{user?.email}</span>
-            <span className="pa-user-role">Administrator</span>
+        <div className="pa-sidebar__foot">
+          <div className="pa-sidebar__user">
+            <span className="pa-sidebar__avatar">
+              <UserRound size={16} strokeWidth={1.9} />
+            </span>
+            <div className="pa-user-info">
+              <span className="pa-user-name">{user?.name || "Administrator"}</span>
+              <span className="pa-user-email">{user?.email}</span>
+            </div>
           </div>
-          <button
-            type="button"
-            className="pa-btn pa-btn--ghost pa-btn--sm"
-            onClick={signOut}
-            title="Sign out"
-          >
-            <LogOut size={14} />
+
+          <button type="button" className="pa-logout" onClick={signOut}>
+            <LogOut size={16} strokeWidth={1.9} />
+            <span>Logout</span>
           </button>
         </div>
       </aside>
 
       <main className="pa-main">
         <header className="pa-topbar">
-          <div className="pa-topbar__status">
-            <span className="ks-dot ks-dot--green" />
-            <span>{statusMessage}</span>
+          <div className="pa-topbar__heading">
+            <p className="pa-kicker">Parashu Command Center</p>
+            <h1>{PAGE_TITLES[tab] || "Control Room"}</h1>
           </div>
 
-          <div className="pa-topbar__controls">
+          <div className="pa-topbar__meta">
             <button
               type="button"
-              className={`pa-toggle${prefs.sirenOnNewAlert ? " is-on" : ""}`}
+              className={`pa-chip pa-chip--toggle${prefs.sirenOnNewAlert ? " is-on" : ""}`}
               onClick={() => togglePref("sirenOnNewAlert")}
               title="Toggle emergency siren on new alert"
             >
-              <BellRing size={14} />
-              <span>Siren</span>
+              <Volume2 size={14} strokeWidth={1.9} />
+              <span>Siren {prefs.sirenOnNewAlert ? "on" : "off"}</span>
             </button>
+
+            <span className="pa-chip">
+              <BellRing size={14} strokeWidth={1.9} />
+              <span>{statusMessage}</span>
+            </span>
+
+            <span className={`pa-chip${activeAlerts.length > 0 ? " pa-chip--danger" : ""}`}>
+              <AlertTriangle size={14} strokeWidth={1.9} />
+              <span>{activeAlerts.length} active</span>
+            </span>
           </div>
         </header>
 
