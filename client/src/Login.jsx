@@ -24,6 +24,79 @@ function GoogleMark() {
   );
 }
 
+// Futuristic Neon Radar & Particle System Background
+function NeonRadarBackground() {
+  return (
+    <div className="pa-neon-radar-system" aria-hidden="true">
+      {/* Soft Ambient Neon Backglows */}
+      <div className="pa-neon-glow pa-neon-glow--blue" />
+      <div className="pa-neon-glow pa-neon-glow--magenta" />
+      <div className="pa-neon-glow pa-neon-glow--red" />
+
+      {/* SVG Concentric Radar System */}
+      <svg
+        className="pa-radar-svg"
+        viewBox="0 0 600 600"
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <defs>
+          <linearGradient id="neonGrad1" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#00f0ff" />
+            <stop offset="30%" stopColor="#3b82f6" />
+            <stop offset="60%" stopColor="#a855f7" />
+            <stop offset="85%" stopColor="#ec4899" />
+            <stop offset="100%" stopColor="#ef4444" />
+          </linearGradient>
+
+          <linearGradient id="neonGrad2" x1="100%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stopColor="#38bdf8" />
+            <stop offset="50%" stopColor="#c084fc" />
+            <stop offset="100%" stopColor="#f43f5e" />
+          </linearGradient>
+        </defs>
+
+        {/* Outer Ring Group (Rotates Clockwise) */}
+        <g className="pa-radar-group pa-radar-rotate-cw">
+          <circle cx="300" cy="300" r="280" stroke="url(#neonGrad1)" strokeWidth="1.8" strokeOpacity="0.85" />
+          <circle cx="300" cy="300" r="270" stroke="#00f0ff" strokeWidth="1.2" strokeDasharray="4 20" strokeOpacity="0.65" />
+          <circle cx="580" cy="300" r="4.5" fill="#00f0ff" className="pa-particle-glow" />
+          <circle cx="20" cy="300" r="4" fill="#ff007f" className="pa-particle-glow" />
+        </g>
+
+        {/* Middle Ring Group (Rotates Counter-Clockwise) */}
+        <g className="pa-radar-group pa-radar-rotate-ccw">
+          <circle cx="300" cy="300" r="230" stroke="url(#neonGrad2)" strokeWidth="2" strokeDasharray="14 18" strokeOpacity="0.8" />
+          <circle cx="300" cy="300" r="185" stroke="#a855f7" strokeWidth="1.4" strokeOpacity="0.75" />
+          <circle cx="300" cy="70" r="4.5" fill="#38bdf8" className="pa-particle-glow" />
+          <circle cx="300" cy="530" r="4.5" fill="#f43f5e" className="pa-particle-glow" />
+        </g>
+
+        {/* Inner Ring Group (Rotates Fast Clockwise) */}
+        <g className="pa-radar-group pa-radar-rotate-cw-fast">
+          <circle cx="300" cy="300" r="140" stroke="#00f0ff" strokeWidth="1.6" strokeDasharray="3 9" strokeOpacity="0.85" />
+          <circle cx="300" cy="300" r="95" stroke="url(#neonGrad1)" strokeWidth="1.4" strokeOpacity="0.9" />
+          <circle cx="300" cy="300" r="55" stroke="#3b82f6" strokeWidth="1.2" strokeOpacity="0.6" />
+          <circle cx="440" cy="300" r="4" fill="#c084fc" className="pa-particle-glow" />
+          <circle cx="160" cy="300" r="4" fill="#06b6d4" className="pa-particle-glow" />
+        </g>
+
+        {/* Crosshair Axes Lines */}
+        <line x1="300" y1="20" x2="300" y2="580" stroke="#38bdf8" strokeWidth="1" strokeOpacity="0.3" strokeDasharray="6 6" />
+        <line x1="20" y1="300" x2="580" y2="300" stroke="#38bdf8" strokeWidth="1" strokeOpacity="0.3" strokeDasharray="6 6" />
+      </svg>
+
+      {/* Rotating Radar Wedge Sweep Beam */}
+      <div className="pa-radar-sweep-container">
+        <div className="pa-radar-sweep-beam" />
+      </div>
+
+      {/* Darkened Center Overlay for Card Content Readability */}
+      <div className="pa-radar-center-darkener" />
+    </div>
+  );
+}
+
 export default function Login() {
   const {
     user,
@@ -100,14 +173,8 @@ export default function Login() {
 
   return (
     <div className="pa-auth-page">
-      {/* Ambient Red/Blue Background Orbs & Radar Sweep (Visible & Animated on Mobile & Desktop) */}
-      <div className="pa-auth-glow pa-auth-glow--red" />
-      <div className="pa-auth-glow pa-auth-glow--blue" />
-      <div className="pa-auth-radar" aria-hidden="true">
-        <span className="pa-auth-radarRing" />
-        <span className="pa-auth-radarRing" />
-        <span className="pa-auth-radarSweep" />
-      </div>
+      {/* Futuristic Animated Neon Radar System Background */}
+      <NeonRadarBackground />
 
       <div className="pa-auth-container">
         {/* Top Brand Header */}
