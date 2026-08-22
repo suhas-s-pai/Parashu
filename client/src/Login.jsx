@@ -2,38 +2,16 @@ import { useState } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import {
   ShieldAlert,
-  Mic,
-  MapPin,
   ShieldCheck,
-  CheckCircle2,
-  XCircle,
   HelpCircle,
   User,
   Phone,
   ArrowRight,
+  ArrowLeft,
   Lock,
+  ChevronRight,
 } from "lucide-react";
 import { useAuth } from "./lib/authContext";
-
-// Read once: these reflect what the browser actually supports, not a
-// decorative claim. Home relies on both APIs, so surfacing their state here
-// tells the operator upfront whether the device is fully capable.
-function readDeviceChecks() {
-  const voice = Boolean(
-    typeof window !== "undefined" &&
-      (window.SpeechRecognition || window.webkitSpeechRecognition)
-  );
-  const geo = typeof navigator !== "undefined" && "geolocation" in navigator;
-  const secure =
-    typeof window !== "undefined" &&
-    (window.isSecureContext || window.location.hostname === "localhost");
-
-  return [
-    { label: "Voice recognition", ok: voice },
-    { label: "Location services", ok: geo },
-    { label: "Secure connection", ok: secure },
-  ];
-}
 
 // The real multi-color "G" mark, inline so it renders without a network
 // request to Google's asset CDN.
@@ -60,16 +38,15 @@ export default function Login() {
   const location = useLocation();
 
   const [pending, setPending] = useState("");
-
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [guestError, setGuestError] = useState("");
 
-  // Read once on mount via lazy initializer — a plain synchronous read, so no
-  // effect is needed to produce it.
-  const [checks] = useState(readDeviceChecks);
-
   const displayError = location.state?.authError || authError;
+
+  // Step state: "landing" | "selection" | "personal" | "admin"
+  // Default to "admin" if an error notification was passed so the user sees it immediately
+  const [step, setStep] = useState(displayError ? "admin" : "landing");
 
   // Reached with a live session — a refresh, or the return leg of the Google
   // redirect. Administrators go straight to the control room; everyone else
@@ -85,10 +62,7 @@ export default function Login() {
 
   const handleGoogleClick = async () => {
     setPending("google");
-
     try {
-      // Resolves by navigating away to Google, so the pending state is only
-      // cleared when something went wrong.
       await signInWithGoogle();
     } catch {
       setPending("");
@@ -110,7 +84,6 @@ export default function Login() {
     }
 
     setPending("guest");
-
     try {
       await signInWithNamePhone(name.trim(), phone.trim());
     } catch {
@@ -120,7 +93,6 @@ export default function Login() {
 
   const handleAdminClick = async () => {
     setPending("admin");
-
     try {
       await signInAsAdmin();
     } catch {
@@ -129,181 +101,237 @@ export default function Login() {
   };
 
   return (
-    <div className="ks-auth">
+    <div className="pa-auth-page">
+      {/* Background Orbs & Radar Sweep (Visible & Animated on Desktop, Tablet & Mobile) */}
+      <div className="pa-auth-glow pa-auth-glow--red" />
+      <div className="pa-auth-glow pa-auth-glow--blue" />
+      <div className="pa-auth-radar" aria-hidden="true">
+        <span className="pa-auth-radarRing" />
+        <span className="pa-auth-radarRing" />
+        <span className="pa-auth-radarSweep" />
+      </div>
 
-      <aside className="ks-auth__brand">
-
-        <div className="ks-auth__glow ks-auth__glow--red" />
-        <div className="ks-auth__glow ks-auth__glow--blue" />
-
-        <div className="ks-auth__radar" aria-hidden="true">
-          <span className="ks-auth__radarRing" />
-          <span className="ks-auth__radarRing" />
-          <span className="ks-auth__radarRing" />
-          <span className="ks-auth__radarSweep" />
-        </div>
-
-        <div className="ks-auth__brandTop">
-          <span className="ks-auth__mark">
-            <ShieldAlert size={19} strokeWidth={2.1} />
+      <div className="pa-auth-container">
+        {/* Top Brand Header */}
+        <div className="pa-auth__brand-header">
+          <div className="pa-auth__mark">
+            <ShieldAlert size={20} strokeWidth={2.2} />
+          </div>
+          <div className="pa-auth__brand-text">
+            <span className="pa-auth__wordmark">Para<span>shu</span></span>
+            <span className="pa-auth__subwordmark">Safety & Control Platform</span>
+          </div>
+          <span className="pa-auth__live">
+            <span className="ks-dot ks-dot--green" /> Live
           </span>
-          <span className="ks-auth__wordmark">Para<span>shu</span></span>
-
-          <span className="ks-auth__live">
-            <span className="ks-dot ks-dot--green" />
-            Live
-          </span>
         </div>
 
-        <div className="ks-auth__brandMid">
-          <h1 className="ks-auth__headline">
-            Emergency response, <em>the instant</em> it's needed.
-          </h1>
-          <p className="ks-auth__tagline">
-            Voice activated alerts, live location tracking and control room
-            monitoring in one platform.
-          </p>
-        </div>
-
-        <div className="ks-auth__checks">
-          {checks.map((check) => (
-            <div className="ks-auth__check" key={check.label}>
-              {check.ok ? (
-                <CheckCircle2 size={16} strokeWidth={1.9} style={{ color: "var(--success)" }} />
-              ) : (
-                <XCircle size={16} strokeWidth={1.9} style={{ color: "var(--faint)" }} />
-              )}
-              <span>{check.label}</span>
-              {check.label === "Voice recognition" && <Mic size={14} strokeWidth={1.8} />}
-              {check.label === "Location services" && <MapPin size={14} strokeWidth={1.8} />}
-              {check.label === "Secure connection" && <ShieldCheck size={14} strokeWidth={1.8} />}
-            </div>
-          ))}
-        </div>
-
-      </aside>
-
-      <section className="ks-auth__panel">
-
-        <div className="ks-auth__form">
-
-          {displayError && (
-            <div className="ks-google__notice">
-              <HelpCircle size={14} strokeWidth={1.9} />
-              {displayError}
-            </div>
-          )}
-
-          {/* ---------- Path 1 + 2: people who may need help ---------- */}
-
-          <div className="ks-authcard">
-            <div className="ks-authcard__head">
-              <span className="ks-authcard__badge ks-authcard__badge--user">
-                <ShieldCheck size={15} strokeWidth={2} />
-              </span>
-              <div>
-                <h2 className="ks-authcard__title">I need protection</h2>
-                <p className="ks-authcard__sub">Personal safety account</p>
-              </div>
-            </div>
+        {/* STEP 0: LANDING */}
+        {step === "landing" && (
+          <div className="pa-auth__step pa-auth__step--landing">
+            <h1 className="pa-auth__headline">
+              Emergency Response Platform
+            </h1>
+            <p className="pa-auth__tagline">
+              Instant emergency tracking, voice protection, and control room monitoring.
+            </p>
 
             <button
               type="button"
-              className="ks-google"
-              onClick={handleGoogleClick}
-              disabled={Boolean(pending)}
+              className="pa-landing-btn"
+              onClick={() => setStep("selection")}
             >
-              <GoogleMark />
-              {pending === "google" ? "Redirecting to Google…" : "Continue with Google"}
+              <span>Continue to Parashu</span>
+              <ArrowRight size={18} />
             </button>
+          </div>
+        )}
 
-            <div className="ks-auth__divider">or</div>
+        {/* STEP 1: SELECTION */}
+        {step === "selection" && (
+          <div className="pa-auth__step pa-auth__step--selection">
+            <div className="pa-auth__step-head">
+              <button
+                type="button"
+                className="pa-auth__back-btn"
+                onClick={() => setStep("landing")}
+              >
+                <ArrowLeft size={14} /> Back
+              </button>
+              <h2>Select Portal</h2>
+              <p>Choose how you want to continue</p>
+            </div>
 
-            <form className="ks-auth__fields" onSubmit={handleGuestSubmit}>
-              <label className="ks-field">
-                <span className="ks-field__label">Full name</span>
-                <span className="ks-searchwrap">
-                  <User size={15} strokeWidth={1.8} />
-                  <input
-                    className="ks-input"
-                    type="text"
-                    placeholder="Enter your name"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    autoComplete="name"
-                  />
+            <div className="pa-selection-grid">
+              {/* Card 1: Personal Safety */}
+              <div className="pa-selection-card">
+                <div className="pa-selection-card__icon pa-selection-card__icon--blue">
+                  <ShieldCheck size={24} strokeWidth={2} />
+                </div>
+                <div className="pa-selection-card__body">
+                  <h3>Personal Safety</h3>
+                  <p>Access your personal emergency and safety dashboard.</p>
+                </div>
+                <button
+                  type="button"
+                  className="ks-btn ks-btn--primary pa-selection-card__btn"
+                  onClick={() => setStep("personal")}
+                >
+                  <span>Continue</span>
+                  <ChevronRight size={16} />
+                </button>
+              </div>
+
+              {/* Card 2: Administrator */}
+              <div className="pa-selection-card pa-selection-card--admin">
+                <div className="pa-selection-card__icon pa-selection-card__icon--red">
+                  <Lock size={24} strokeWidth={2} />
+                </div>
+                <div className="pa-selection-card__body">
+                  <h3>Administrator</h3>
+                  <p>Access the emergency control room.</p>
+                </div>
+                <button
+                  type="button"
+                  className="ks-btn ks-btn--danger pa-selection-card__btn"
+                  onClick={() => setStep("admin")}
+                >
+                  <span>Administrator Login</span>
+                  <ChevronRight size={16} />
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* STEP 2A: PERSONAL SAFETY LOGIN */}
+        {step === "personal" && (
+          <div className="pa-auth__step pa-auth__step--form">
+            <div className="pa-auth__step-head">
+              <button
+                type="button"
+                className="pa-auth__back-btn"
+                onClick={() => setStep("selection")}
+              >
+                <ArrowLeft size={14} /> Back to Selection
+              </button>
+            </div>
+
+            <div className="ks-authcard">
+              <div className="ks-authcard__head">
+                <span className="ks-authcard__badge ks-authcard__badge--user">
+                  <ShieldCheck size={15} strokeWidth={2} />
                 </span>
-              </label>
-
-              <label className="ks-field">
-                <span className="ks-field__label">Phone number</span>
-                <span className="ks-searchwrap">
-                  <Phone size={15} strokeWidth={1.8} />
-                  <input
-                    className="ks-input"
-                    type="tel"
-                    placeholder="Phone number responders can call"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    autoComplete="tel"
-                  />
-                </span>
-              </label>
-
-              {guestError && <p className="ks-authcard__error">{guestError}</p>}
+                <div>
+                  <h2 className="ks-authcard__title">Personal Safety</h2>
+                  <p className="ks-authcard__sub">Personal safety account</p>
+                </div>
+              </div>
 
               <button
-                type="submit"
-                className="ks-btn ks-auth__submit"
+                type="button"
+                className="ks-google"
+                onClick={handleGoogleClick}
                 disabled={Boolean(pending)}
               >
-                {pending === "guest" ? "Signing in…" : "Continue with Name + Phone"}
-                <ArrowRight size={15} strokeWidth={2} />
+                <GoogleMark />
+                {pending === "google" ? "Redirecting to Google…" : "Continue with Google"}
               </button>
-            </form>
+
+              <div className="ks-auth__divider">or</div>
+
+              <form className="ks-auth__fields" onSubmit={handleGuestSubmit}>
+                <label className="ks-field">
+                  <span className="ks-field__label">Full name</span>
+                  <span className="ks-searchwrap">
+                    <User size={15} strokeWidth={1.8} />
+                    <input
+                      className="ks-input"
+                      type="text"
+                      placeholder="Enter your name"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      autoComplete="name"
+                    />
+                  </span>
+                </label>
+
+                <label className="ks-field">
+                  <span className="ks-field__label">Phone number</span>
+                  <span className="ks-searchwrap">
+                    <Phone size={15} strokeWidth={1.8} />
+                    <input
+                      className="ks-input"
+                      type="tel"
+                      placeholder="Phone number responders can call"
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      autoComplete="tel"
+                    />
+                  </span>
+                </label>
+
+                {guestError && <p className="ks-authcard__error">{guestError}</p>}
+
+                <button
+                  type="submit"
+                  className="ks-btn ks-auth__submit"
+                  disabled={Boolean(pending)}
+                >
+                  {pending === "guest" ? "Signing in…" : "Continue with Name + Phone"}
+                  <ArrowRight size={15} strokeWidth={2} />
+                </button>
+              </form>
+            </div>
           </div>
+        )}
 
-          {/* ---------- Path 3: control room staff ---------- */}
-
-          <div className="ks-authsplit">
-            <span>Control room staff</span>
-          </div>
-
-          <div className="ks-authcard ks-authcard--admin">
-            <div className="ks-authcard__head">
-              <span className="ks-authcard__badge ks-authcard__badge--admin">
-                <Lock size={15} strokeWidth={2} />
-              </span>
-              <div>
-                <h2 className="ks-authcard__title">Administrator Login</h2>
-                <p className="ks-authcard__sub">Emergency control room access</p>
-              </div>
+        {/* STEP 2B: ADMINISTRATOR LOGIN */}
+        {step === "admin" && (
+          <div className="pa-auth__step pa-auth__step--form">
+            <div className="pa-auth__step-head">
+              <button
+                type="button"
+                className="pa-auth__back-btn"
+                onClick={() => setStep("selection")}
+              >
+                <ArrowLeft size={14} /> Back to Selection
+              </button>
             </div>
 
-            <button
-              type="button"
-              className="ks-google"
-              onClick={handleAdminClick}
-              disabled={Boolean(pending)}
-            >
-              <GoogleMark />
-              {pending === "admin" ? "Redirecting to Google…" : "Continue with Google"}
-            </button>
+            {displayError && (
+              <div className="ks-google__notice" style={{ marginBottom: 16 }}>
+                <HelpCircle size={14} strokeWidth={1.9} />
+                {displayError}
+              </div>
+            )}
+
+            <div className="ks-authcard ks-authcard--admin">
+              <div className="ks-authcard__head">
+                <span className="ks-authcard__badge ks-authcard__badge--admin">
+                  <Lock size={15} strokeWidth={2} />
+                </span>
+                <div>
+                  <h2 className="ks-authcard__title">Administrator Login</h2>
+                  <p className="ks-authcard__sub">Emergency control room access</p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                className="ks-google"
+                onClick={handleAdminClick}
+                disabled={Boolean(pending)}
+              >
+                <GoogleMark />
+                {pending === "admin" ? "Redirecting to Google…" : "Continue with Google"}
+              </button>
+            </div>
           </div>
-
-          <p className="ks-auth__note">
-            <HelpCircle size={13} strokeWidth={1.8} />
-            Your session stays signed in on this device until you log out.
-            Administrator accounts open the control room instead of the personal
-            safety screen.
-          </p>
-
-        </div>
+        )}
 
         <p className="ks-auth__foot">SPRINGX · PARASHU EMERGENCY PLATFORM</p>
-
-      </section>
-
+      </div>
     </div>
   );
 }
