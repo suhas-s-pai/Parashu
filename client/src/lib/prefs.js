@@ -47,8 +47,20 @@ export function usePrefs() {
   }, [prefs]);
 
   const togglePref = useCallback((key) => {
-    setPrefs((current) => ({ ...current, [key]: !current[key] }));
+    setPrefs((current) => {
+      const base = current || DEFAULT_PREFS;
+      return { ...base, [key]: !base[key] };
+    });
   }, []);
 
-  return [prefs, togglePref];
+  const safePrefs = prefs || DEFAULT_PREFS;
+
+  // Return a hybrid result that supports BOTH array destructuring `const [prefs, toggle] = usePrefs()`
+  // AND object destructuring `const { prefs, togglePref } = usePrefs()`.
+  const result = [safePrefs, togglePref];
+  result.prefs = safePrefs;
+  result.togglePref = togglePref;
+  result.toggle = togglePref;
+
+  return result;
 }

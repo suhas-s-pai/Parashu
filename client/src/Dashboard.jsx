@@ -23,7 +23,7 @@ import {
   osmEmbedUrl,
   osmLinkUrl,
 } from "./lib/alerts";
-import { usePrefs } from "./lib/prefs";
+import { DEFAULT_PREFS, usePrefs } from "./lib/prefs";
 import {
   AlertTriangle,
   BellRing,
@@ -234,7 +234,7 @@ function LiveMap({ alert }) {
 
 export default function Dashboard() {
   const { user, signOut } = useAuth();
-  const { prefs, togglePref } = usePrefs();
+  const [prefs = DEFAULT_PREFS, togglePref] = usePrefs();
 
   const [activeAlerts, setActiveAlerts] = useState([]);
   const [history, setHistory] = useState([]);
@@ -270,11 +270,11 @@ export default function Dashboard() {
   const addressRequestsRef = useRef(new Set());
   const [audioBlocked, setAudioBlocked] = useState(false);
 
-  const sirenEnabledRef = useRef(prefs.sirenOnNewAlert);
+  const sirenEnabledRef = useRef(prefs?.sirenOnNewAlert ?? true);
 
   useEffect(() => {
-    sirenEnabledRef.current = prefs.sirenOnNewAlert;
-  }, [prefs.sirenOnNewAlert]);
+    sirenEnabledRef.current = prefs?.sirenOnNewAlert ?? true;
+  }, [prefs?.sirenOnNewAlert]);
 
   // Plays siren sound strictly for 4 seconds, then pauses and resets audio
   const playSiren4Seconds = useCallback(() => {
@@ -406,7 +406,7 @@ export default function Dashboard() {
   }, [loadHistory]);
 
   useEffect(() => {
-    if (!prefs.realtime) {
+    if (!prefs?.realtime) {
       return undefined;
     }
 
@@ -1077,7 +1077,7 @@ export default function Dashboard() {
           <div className="pa-topbar__controls">
             <button
               type="button"
-              className={`pa-toggle${prefs.sirenOnNewAlert ? " is-on" : ""}`}
+              className={`pa-toggle${prefs?.sirenOnNewAlert ? " is-on" : ""}`}
               onClick={() => togglePref("sirenOnNewAlert")}
               title="Toggle emergency siren on new alert"
             >
