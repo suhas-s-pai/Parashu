@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import QRCode from "qrcode";
 import { useAuth } from "./lib/authContext";
 import {
   getAlertStreamUrl,
@@ -7,8 +8,11 @@ import {
   resolveAlert,
   clearResolvedHistory,
   fetchAdmins,
-  createAdmin,
   deleteAdmin,
+  generateAdminInvitation,
+  fetchAdminRequests,
+  approveAdminRequest,
+  rejectAdminRequest,
 } from "./lib/api";
 import {
   formatCoordinates,
@@ -22,16 +26,22 @@ import { usePrefs } from "./lib/prefs";
 import {
   AlertTriangle,
   BellRing,
+  Check,
   CheckCircle2,
   ChevronDown,
   ChevronUp,
+  Clock,
+  Copy,
   History,
   LogOut,
   MapPin,
   Menu,
   Plus,
+  QrCode,
+  RotateCcw,
   Search,
   Settings as SettingsIcon,
+  Share2,
   ShieldAlert,
   ShieldCheck,
   Trash2,
@@ -92,15 +102,17 @@ export default function Dashboard({ focus = "active" }) {
   const [deleteErrorMsg, setDeleteErrorMsg] = useState("");
 
   const [admins, setAdmins] = useState([]);
-  const [showAddAdminModal, setShowAddAdminModal] = useState(false);
+  const [adminRequests, setAdminRequests] = useState([]);
+  const [showInviteModal, setShowInviteModal] = useState(false);
   const [showRemoveAdminModal, setShowRemoveAdminModal] = useState(false);
   const [targetAdmin, setTargetAdmin] = useState(null);
 
-  const [newAdminName, setNewAdminName] = useState("");
-  const [newAdminEmail, setNewAdminEmail] = useState("");
-  const [newAdminPassword, setNewAdminPassword] = useState("");
-  const [addAdminError, setAddAdminError] = useState("");
-  const [submittingAdmin, setSubmittingAdmin] = useState(false);
+  // QR Code invitation state
+  const [currentInvitation, setCurrentInvitation] = useState(null);
+  const [qrDataUrl, setQrDataUrl] = useState("");
+  const [timeLeftSeconds, setTimeLeftSeconds] = useState(300);
+  const [generatingInvite, setGeneratingInvite] = useState(false);
+  const [shareToast, setShareToast] = useState("");
 
   const [removeAdminError, setRemoveAdminError] = useState("");
   const [removingAdmin, setRemovingAdmin] = useState(false);
@@ -116,55 +128,128 @@ export default function Dashboard({ focus = "active" }) {
     }
   }, []);
 
+  const loadAdminRequests = useCallback(async () => {
+    try {
+      const reqs = await fetchAdminRequests();
+      setAdminRequests(reqs);
+    } catch {
+      // Failed to load admin requests
+    }
+  }, []);
+
   useEffect(() => {
     if (activeSection === "admins") {
       loadAdmins();
+      loadAdminRequests();
     }
-  }, [activeSection, loadAdmins]);
+  }, [activeSection, loadAdmins, loadAdminRequests]);
 
-  const handleAddAdminSubmit = async (e) => {
-    e.preventDefault();
-    setAddAdminError("");
-
-    if (!newAdminName.trim()) {
-      setAddAdminError("Administrator name is required.");
-      return;
-    }
-
-    if (!newAdminEmail.trim() || !newAdminEmail.includes("@")) {
-      setAddAdminError("A valid email address is required.");
-      return;
-    }
-
-    if (!newAdminPassword || newAdminPassword.length < 6) {
-      setAddAdminError("Password must be at least 6 characters long.");
-      return;
-    }
-
-    setSubmittingAdmin(true);
+  // Generate QR code invitation
+  const handleOpenInviteModal = async () => {
+    setGeneratingInvite(true);
+    setShareToast("");
+    setShowInviteModal(true);
 
     try {
-      await createAdmin({
-        name: newAdminName.trim(),
-        email: newAdminEmail.trim(),
-        password: newAdminPassword,
-      });
+      const res = await generateAdminInvitation();
+      if (res?.success && res.invitation) {
+        const inv = res.invitation;
+        setCurrentInvitation(inv);
+        const inviteUrl = `${window.location.origin}/admin/invite/${inv.token}`;
 
-      setShowAddAdminModal(false);
-      setNewAdminName("");
-      setNewAdminEmail("");
-      setNewAdminPassword("");
-      setAdminMsg("New administrator account created successfully.");
-      setTimeout(() => setAdminMsg(""), 6000);
-      loadAdmins();
-    } catch (err) {
-      setAddAdminError(
-        err?.response?.data?.message ||
-          err?.message ||
-          "Could not create administrator account."
-      );
+        const dataUrl = await QRCode.toDataURL(inviteUrl, {
+          width: 260,
+          margin: 2,
+          color: {
+            dark: "#0f172a",
+            light: "#ffffff",
+          },
+        });
+        setQrDataUrl(dataUrl);
+
+        const remaining = Math.max(0, Math.floor((inv.expires_at - Date.now()) / 1000));
+        setTimeLeftSeconds(remaining || 300);
+      }
+    } catch {
+      // Error generating invitation
     } finally {
-      setSubmittingAdmin(false);
+      setGeneratingInvite(false);
+    }
+  };
+
+  // Live countdown timer effect for active QR code modal
+  useEffect(() => {
+    if (!showInviteModal || !currentInvitation || timeLeftSeconds <= 0) return;
+
+    const timer = setInterval(() => {
+      setTimeLeftSeconds((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [showInviteModal, currentInvitation, timeLeftSeconds]);
+
+  // Share invitation button handler
+  const handleShareInvitation = async () => {
+    if (!currentInvitation) return;
+    const inviteUrl = `${window.location.origin}/admin/invite/${currentInvitation.token}`;
+    const shareMessage = `You're invited to become an administrator of Parashu. Open this invitation to request admin access: ${inviteUrl}`;
+
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: "Parashu Administrator Invitation",
+          text: shareMessage,
+          url: inviteUrl,
+        });
+        return;
+      } catch {
+        // Fallback to clipboard if share was cancelled or failed
+      }
+    }
+
+    try {
+      await navigator.clipboard.writeText(inviteUrl);
+      setShareToast("Invitation link copied!");
+      setTimeout(() => setShareToast(""), 4000);
+    } catch {
+      setShareToast("Copy failed. Link: " + inviteUrl);
+    }
+  };
+
+  // Approve Admin Request
+  const handleApproveRequest = async (reqId) => {
+    try {
+      const res = await approveAdminRequest(reqId);
+      if (res?.success) {
+        setAdminMsg(res.message || "Administrator request approved.");
+        setTimeout(() => setAdminMsg(""), 6000);
+        loadAdmins();
+        loadAdminRequests();
+      }
+    } catch (err) {
+      setAdminMsg(err?.response?.data?.message || err?.message || "Could not approve admin request.");
+      setTimeout(() => setAdminMsg(""), 6000);
+    }
+  };
+
+  // Reject Admin Request
+  const handleRejectRequest = async (reqId) => {
+    try {
+      const res = await rejectAdminRequest(reqId);
+      if (res?.success) {
+        setAdminMsg(res.message || "Administrator request rejected.");
+        setTimeout(() => setAdminMsg(""), 6000);
+        loadAdminRequests();
+      }
+    } catch (err) {
+      setAdminMsg(err?.response?.data?.message || err?.message || "Could not reject admin request.");
+      setTimeout(() => setAdminMsg(""), 6000);
     }
   };
 
@@ -607,12 +692,9 @@ export default function Dashboard({ focus = "active" }) {
         <button
           type="button"
           className="pa-btn pa-btn--danger"
-          onClick={() => {
-            setAddAdminError("");
-            setShowAddAdminModal(true);
-          }}
+          onClick={handleOpenInviteModal}
         >
-          <UserPlus size={15} />
+          <QrCode size={16} />
           <span>Add New Admin</span>
         </button>
       </div>
@@ -624,56 +706,113 @@ export default function Dashboard({ focus = "active" }) {
         </div>
       )}
 
-      <div className="pa-history-list" style={{ marginTop: 16 }}>
-        {admins.length === 0 && (
-          <div className="pa-empty-card">
-            <ShieldCheck size={20} />
-            <h3>Loading administrators…</h3>
+      {/* Pending Admin Requests Section */}
+      {adminRequests.length > 0 && (
+        <div style={{ marginTop: 20 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+            <Clock size={16} style={{ color: "#facc15" }} />
+            <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>Pending Admin Requests ({adminRequests.length})</h3>
           </div>
-        )}
-
-        {admins.map((adm) => {
-          const isSelf = adm.user_id === user?.id || adm.email === user?.email;
-
-          return (
-            <article key={adm.user_id} className="pa-history-card pa-admin-card" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 200 }}>
-                <div className="pa-avatar" style={{ width: 40, height: 40, fontSize: 15, background: isSelf ? "linear-gradient(135deg, #2563eb, #1d4ed8)" : "linear-gradient(135deg, #475569, #334155)" }}>
-                  {adm.name.charAt(0).toUpperCase()}
-                </div>
-                <div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <strong style={{ fontSize: 14 }}>{adm.name}</strong>
-                    {isSelf && <span className="pa-pill pa-pill--neutral" style={{ fontSize: 10 }}>You</span>}
+          <div className="pa-history-list">
+            {adminRequests.map((req) => (
+              <article key={req.id} className="pa-history-card pa-admin-card" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, borderLeft: "3px solid #facc15", flexWrap: "wrap" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 200 }}>
+                  <div className="pa-avatar" style={{ width: 40, height: 40, fontSize: 15, background: "linear-gradient(135deg, #d97706, #b45309)" }}>
+                    {req.name.charAt(0).toUpperCase()}
                   </div>
-                  <p style={{ margin: "2px 0 0", fontSize: 12, color: "var(--muted)" }}>
-                    {adm.email} · ID: <span className="pa-mono" style={{ fontSize: 11 }}>{adm.user_id.slice(0, 8)}…</span>
-                  </p>
+                  <div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <strong style={{ fontSize: 14 }}>{req.name}</strong>
+                      <span className="pa-pill" style={{ background: "rgba(234, 179, 8, 0.16)", color: "#fde047", border: "1px solid rgba(234, 179, 8, 0.3)", fontSize: 10 }}>PENDING APPROVAL</span>
+                    </div>
+                    <p style={{ margin: "2px 0 0", fontSize: 12, color: "var(--muted)" }}>
+                      {req.email} · Requested {formatTime(req.created_at)}
+                    </p>
+                  </div>
                 </div>
-              </div>
 
-              <div style={{ display: "flex", alignItems: "center", gap: 12, marginLeft: "auto" }}>
-                <span className="pa-pill" style={{ fontSize: 11 }}>
-                  Added {formatTime(adm.created_at)}
-                </span>
-                <button
-                  type="button"
-                  className="pa-btn pa-btn--ghost"
-                  style={{ color: "#fca5a5", borderColor: "rgba(239, 68, 68, 0.2)" }}
-                  onClick={() => {
-                    setTargetAdmin(adm);
-                    setRemoveAdminError("");
-                    setShowRemoveAdminModal(true);
-                  }}
-                  title={`Remove ${adm.name}`}
-                >
-                  <Trash2 size={14} />
-                  <span>Remove</span>
-                </button>
-              </div>
-            </article>
-          );
-        })}
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: "auto" }}>
+                  <button
+                    type="button"
+                    className="pa-btn pa-btn--success"
+                    style={{ padding: "6px 12px", fontSize: 12 }}
+                    onClick={() => handleApproveRequest(req.id)}
+                  >
+                    <Check size={14} />
+                    <span>Approve</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="pa-btn pa-btn--ghost"
+                    style={{ color: "#fca5a5", borderColor: "rgba(239, 68, 68, 0.2)", padding: "6px 12px", fontSize: 12 }}
+                    onClick={() => handleRejectRequest(req.id)}
+                  >
+                    <X size={14} />
+                    <span>Reject</span>
+                  </button>
+                </div>
+              </article>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Existing Administrators List */}
+      <div style={{ marginTop: 24 }}>
+        <h3 style={{ margin: "0 0 12px", fontSize: 15, fontWeight: 700, display: "flex", alignItems: "center", gap: 8 }}>
+          <ShieldCheck size={16} style={{ color: "#60a5fa" }} /> Active Administrators ({admins.length})
+        </h3>
+        <div className="pa-history-list">
+          {admins.length === 0 && (
+            <div className="pa-empty-card">
+              <ShieldCheck size={20} />
+              <h3>Loading administrators…</h3>
+            </div>
+          )}
+
+          {admins.map((adm) => {
+            const isSelf = adm.user_id === user?.id || adm.email === user?.email;
+
+            return (
+              <article key={adm.user_id} className="pa-history-card pa-admin-card" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 200 }}>
+                  <div className="pa-avatar" style={{ width: 40, height: 40, fontSize: 15, background: isSelf ? "linear-gradient(135deg, #2563eb, #1d4ed8)" : "linear-gradient(135deg, #475569, #334155)" }}>
+                    {adm.name.charAt(0).toUpperCase()}
+                  </div>
+                  <div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <strong style={{ fontSize: 14 }}>{adm.name}</strong>
+                      {isSelf && <span className="pa-pill pa-pill--neutral" style={{ fontSize: 10 }}>You</span>}
+                    </div>
+                    <p style={{ margin: "2px 0 0", fontSize: 12, color: "var(--muted)" }}>
+                      {adm.email} · ID: <span className="pa-mono" style={{ fontSize: 11 }}>{adm.user_id.slice(0, 8)}…</span>
+                    </p>
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", alignItems: "center", gap: 12, marginLeft: "auto" }}>
+                  <span className="pa-pill" style={{ fontSize: 11 }}>
+                    Added {formatTime(adm.created_at)}
+                  </span>
+                  <button
+                    type="button"
+                    className="pa-btn pa-btn--ghost"
+                    style={{ color: "#fca5a5", borderColor: "rgba(239, 68, 68, 0.2)" }}
+                    onClick={() => {
+                      setTargetAdmin(adm);
+                      setRemoveAdminError("");
+                      setShowRemoveAdminModal(true);
+                    }}
+                    title={`Remove ${adm.name}`}
+                  >
+                    <Trash2 size={14} />
+                    <span>Remove</span>
+                  </button>
+                </div>
+              </article>
+            );
+          })}
+        </div>
       </div>
     </section>
   );
@@ -899,95 +1038,131 @@ export default function Dashboard({ focus = "active" }) {
         </div>
       )}
 
-      {/* Add Admin Modal */}
-      {showAddAdminModal && (
-        <div className="ks-modal-overlay" onMouseDown={() => setShowAddAdminModal(false)}>
+      {/* Invite New Administrator QR Code Modal */}
+      {showInviteModal && (
+        <div className="ks-modal-overlay" onMouseDown={() => setShowInviteModal(false)}>
           <div
             className="ks-modal"
+            style={{ maxWidth: 440 }}
             role="dialog"
             aria-modal="true"
-            aria-label="Add New Administrator"
+            aria-label="Invite New Administrator"
             onMouseDown={(e) => e.stopPropagation()}
           >
             <div className="ks-modal__head">
-              <span className="ks-modal__icon" style={{ background: "rgba(37, 99, 235, 0.16)", color: "#93c5fd" }}>
-                <UserPlus size={16} strokeWidth={2} />
+              <span className="ks-modal__icon" style={{ background: "rgba(220, 38, 38, 0.16)", color: "#fca5a5" }}>
+                <QrCode size={18} strokeWidth={2} />
               </span>
-              <h2>Add New Administrator</h2>
+              <h2>Invite New Administrator</h2>
               <button
                 type="button"
                 className="ks-modal__close"
-                onClick={() => setShowAddAdminModal(false)}
+                onClick={() => setShowInviteModal(false)}
                 aria-label="Close"
               >
                 <X size={16} strokeWidth={2} />
               </button>
             </div>
 
-            <form onSubmit={handleAddAdminSubmit}>
-              <div className="ks-modal__body">
-                <label className="ks-field">
-                  <span className="ks-field__label">Full Name</span>
-                  <input
-                    className="ks-input"
-                    type="text"
-                    placeholder="e.g. Sarah Connor"
-                    value={newAdminName}
-                    onChange={(e) => setNewAdminName(e.target.value)}
-                    required
-                  />
-                </label>
-
-                <label className="ks-field">
-                  <span className="ks-field__label">Email Address</span>
-                  <input
-                    className="ks-input"
-                    type="email"
-                    placeholder="admin@domain.com"
-                    value={newAdminEmail}
-                    onChange={(e) => setNewAdminEmail(e.target.value)}
-                    required
-                  />
-                </label>
-
-                <label className="ks-field">
-                  <span className="ks-field__label">Password</span>
-                  <input
-                    className="ks-input"
-                    type="password"
-                    placeholder="At least 6 characters"
-                    value={newAdminPassword}
-                    onChange={(e) => setNewAdminPassword(e.target.value)}
-                    required
-                    minLength={6}
-                  />
-                </label>
-
-                {addAdminError && (
-                  <p style={{ margin: 0, fontSize: 12.5, color: "#fca5a5", background: "rgba(220,38,38,0.15)", padding: "8px 10px", borderRadius: 6, border: "1px solid rgba(220,38,38,0.3)" }}>
-                    Error: {addAdminError}
+            <div className="ks-modal__body" style={{ textAlign: "center", padding: "20px 20px" }}>
+              {generatingInvite ? (
+                <div style={{ padding: "40px 0", color: "var(--muted)" }}>
+                  <p>Generating invitation token and QR code…</p>
+                </div>
+              ) : (
+                <>
+                  <p style={{ margin: "0 0 16px", fontSize: 13, color: "var(--muted)" }}>
+                    Scan this QR code or share the invitation link with the person you want to add as an administrator.
                   </p>
-                )}
-              </div>
 
-              <div className="ks-modal__foot">
-                <button
-                  type="button"
-                  className="ks-btn ks-btn--ghost"
-                  onClick={() => setShowAddAdminModal(false)}
-                  disabled={submittingAdmin}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="ks-btn ks-btn--danger"
-                  disabled={submittingAdmin}
-                >
-                  {submittingAdmin ? "Creating…" : "Create Administrator"}
-                </button>
-              </div>
-            </form>
+                  {/* QR Code Container */}
+                  <div style={{ position: "relative", display: "inline-block", background: "#ffffff", padding: 12, borderRadius: 16, boxShadow: "0 4px 20px rgba(0,0,0,0.4)" }}>
+                    {qrDataUrl ? (
+                      <img
+                        src={qrDataUrl}
+                        alt="Admin Invitation QR Code"
+                        style={{ width: 220, height: 220, display: "block", filter: timeLeftSeconds === 0 ? "blur(6px) opacity(0.25)" : "none" }}
+                      />
+                    ) : (
+                      <div style={{ width: 220, height: 220, display: "grid", placeItems: "center", color: "#64748b" }}>
+                        <span>Generating QR…</span>
+                      </div>
+                    )}
+
+                    {timeLeftSeconds === 0 && (
+                      <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "rgba(2, 6, 23, 0.85)", borderRadius: 16, padding: 16 }}>
+                        <Clock size={28} style={{ color: "#ef4444", marginBottom: 6 }} />
+                        <strong style={{ color: "#fca5a5", fontSize: 14 }}>Invitation Expired</strong>
+                        <span style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>5-minute time limit reached</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Token & Timer */}
+                  <div style={{ marginTop: 16, display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+                    {timeLeftSeconds > 0 ? (
+                      <div style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 14px", borderRadius: 20, background: "rgba(234, 179, 8, 0.14)", border: "1px solid rgba(234, 179, 8, 0.3)", color: "#fde047", fontSize: 13, fontWeight: 600 }}>
+                        <Clock size={14} />
+                        <span>Invitation expires in {String(Math.floor(timeLeftSeconds / 60)).padStart(2, "0")}:{String(timeLeftSeconds % 60).padStart(2, "0")}</span>
+                      </div>
+                    ) : (
+                      <div style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 14px", borderRadius: 20, background: "rgba(239, 68, 68, 0.16)", border: "1px solid rgba(239, 68, 68, 0.3)", color: "#fca5a5", fontSize: 13, fontWeight: 600 }}>
+                        <Clock size={14} />
+                        <span>Invitation Expired</span>
+                      </div>
+                    )}
+
+                    {currentInvitation && (
+                      <p style={{ margin: "4px 0 0", fontSize: 11.5, color: "var(--muted)" }}>
+                        Code: <span className="pa-mono" style={{ color: "var(--text)" }}>{currentInvitation.token.slice(0, 16)}…</span>
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Toast notification */}
+                  {shareToast && (
+                    <div style={{ marginTop: 12, padding: "8px 12px", borderRadius: 6, background: "rgba(34, 197, 94, 0.15)", border: "1px solid rgba(34, 197, 94, 0.3)", color: "#4ade80", fontSize: 12.5, display: "inline-flex", alignItems: "center", gap: 6 }}>
+                      <Check size={14} />
+                      {shareToast}
+                    </div>
+                  )}
+
+                  {/* Actions */}
+                  <div style={{ marginTop: 20, display: "grid", gap: 10 }}>
+                    {timeLeftSeconds > 0 ? (
+                      <button
+                        type="button"
+                        className="ks-btn ks-btn--danger"
+                        style={{ width: "100%", justifyContent: "center", gap: 8 }}
+                        onClick={handleShareInvitation}
+                      >
+                        <Share2 size={16} />
+                        <span>Share Invitation Link</span>
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="ks-btn ks-btn--danger"
+                        style={{ width: "100%", justifyContent: "center", gap: 8 }}
+                        onClick={handleOpenInviteModal}
+                      >
+                        <RotateCcw size={16} />
+                        <span>Generate New Invitation</span>
+                      </button>
+                    )}
+
+                    <button
+                      type="button"
+                      className="ks-btn ks-btn--ghost"
+                      style={{ width: "100%", justifyContent: "center" }}
+                      onClick={() => setShowInviteModal(false)}
+                    >
+                      Close
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </div>
       )}

@@ -3,6 +3,7 @@ import { ShieldAlert } from "lucide-react";
 import Login from "./Login";
 import Dashboard from "./Dashboard";
 import Home from "./Home";
+import AdminInvitePage from "./AdminInvitePage";
 import MapGrid from "./MapGrid";
 import Insights from "./Insights";
 import Reports from "./Reports";
@@ -85,6 +86,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/admin/invite/:token" element={<AdminInvitePage />} />
 
       <Route
         path="/"

@@ -89,3 +89,33 @@ export async function deleteAdmin(id) {
   const res = await api.delete(`/admins/${encodeURIComponent(id)}`);
   return res.data;
 }
+
+export async function generateAdminInvitation() {
+  const res = await api.post("/admin-invitations/generate");
+  return res.data;
+}
+
+export async function verifyAdminInvitation(token) {
+  const res = await api.get(`/admin-invitations/verify/${encodeURIComponent(token)}`);
+  return res.data;
+}
+
+export async function submitAdminRequest(payload) {
+  const res = await api.post("/admin-invitations/submit-request", payload);
+  return res.data;
+}
+
+export async function fetchAdminRequests() {
+  const res = await api.get("/admin-requests");
+  return res.data || [];
+}
+
+export async function approveAdminRequest(id) {
+  const res = await api.post(`/admin-requests/${encodeURIComponent(id)}/approve`);
+  return res.data;
+}
+
+export async function rejectAdminRequest(id) {
+  const res = await api.post(`/admin-requests/${encodeURIComponent(id)}/reject`);
+  return res.data;
+}
