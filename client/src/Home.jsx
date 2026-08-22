@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Navigate } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "./lib/authContext";
 import { fetchAlertStatus, sendSos } from "./lib/api";
@@ -523,6 +524,10 @@ export default function Home() {
     : { text: "Not Available", dot: "" };
 
   const nearbyLabel = { police: "Police", hospital: "Hospital" }[nearbyType] || "";
+
+  if (user?.isAdmin) {
+    return <Navigate to="/dashboard" replace />;
+  }
 
   return (
     <div className="ks-home">

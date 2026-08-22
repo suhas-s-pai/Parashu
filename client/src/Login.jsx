@@ -12,8 +12,6 @@ import {
   Phone,
   ArrowRight,
   Lock,
-  Mail,
-  KeyRound,
 } from "lucide-react";
 import { useAuth } from "./lib/authContext";
 
@@ -67,19 +65,22 @@ export default function Login() {
   const [phone, setPhone] = useState("");
   const [guestError, setGuestError] = useState("");
 
-  const [adminEmail, setAdminEmail] = useState("");
-  const [adminPassword, setAdminPassword] = useState("");
-
   // Read once on mount via lazy initializer — a plain synchronous read, so no
   // effect is needed to produce it.
   const [checks] = useState(readDeviceChecks);
 
+  const displayError = location.state?.authError || authError;
+
   // Reached with a live session — a refresh, or the return leg of the Google
   // redirect. Administrators go straight to the control room; everyone else
-  // resumes wherever they were headed.
+  // resumes wherever they were headed unless denied admin access.
   if (user) {
-    const fallback = isAdmin ? "/dashboard" : "/";
-    return <Navigate to={location.state?.from || fallback} replace />;
+    if (isAdmin) {
+      return <Navigate to={location.state?.from || "/dashboard"} replace />;
+    }
+    if (!location.state?.authError && location.state?.from !== "/dashboard") {
+      return <Navigate to={location.state?.from || "/"} replace />;
+    }
   }
 
   const handleGoogleClick = async () => {
@@ -117,15 +118,13 @@ export default function Login() {
     }
   };
 
-  const handleAdminSubmit = async (event) => {
-    event.preventDefault();
+  const handleAdminClick = async () => {
     setPending("admin");
 
     try {
-      await signInAsAdmin(adminEmail.trim(), adminPassword);
+      await signInAsAdmin();
     } catch {
       setPending("");
-      setAdminPassword("");
     }
   };
 
@@ -188,10 +187,10 @@ export default function Login() {
 
         <div className="ks-auth__form">
 
-          {authError && (
+          {displayError && (
             <div className="ks-google__notice">
               <HelpCircle size={14} strokeWidth={1.9} />
-              {authError}
+              {displayError}
             </div>
           )}
 
@@ -281,46 +280,15 @@ export default function Login() {
               </div>
             </div>
 
-            <form className="ks-auth__fields" onSubmit={handleAdminSubmit}>
-              <label className="ks-field">
-                <span className="ks-field__label">Email</span>
-                <span className="ks-searchwrap">
-                  <Mail size={15} strokeWidth={1.8} />
-                  <input
-                    className="ks-input"
-                    type="email"
-                    placeholder="admin@yourdomain.com"
-                    value={adminEmail}
-                    onChange={(e) => setAdminEmail(e.target.value)}
-                    autoComplete="email"
-                  />
-                </span>
-              </label>
-
-              <label className="ks-field">
-                <span className="ks-field__label">Password</span>
-                <span className="ks-searchwrap">
-                  <KeyRound size={15} strokeWidth={1.8} />
-                  <input
-                    className="ks-input"
-                    type="password"
-                    placeholder="Administrator password"
-                    value={adminPassword}
-                    onChange={(e) => setAdminPassword(e.target.value)}
-                    autoComplete="current-password"
-                  />
-                </span>
-              </label>
-
-              <button
-                type="submit"
-                className="ks-btn ks-btn--danger ks-auth__submit"
-                disabled={Boolean(pending) || !adminEmail || !adminPassword}
-              >
-                {pending === "admin" ? "Verifying…" : "Login as Admin"}
-                <ArrowRight size={15} strokeWidth={2} />
-              </button>
-            </form>
+            <button
+              type="button"
+              className="ks-google"
+              onClick={handleAdminClick}
+              disabled={Boolean(pending)}
+            >
+              <GoogleMark />
+              {pending === "admin" ? "Redirecting to Google…" : "Continue with Google"}
+            </button>
           </div>
 
           <p className="ks-auth__note">

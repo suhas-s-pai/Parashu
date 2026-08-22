@@ -56,7 +56,13 @@ function RequireAdmin({ children }) {
   }
 
   if (!isAdmin) {
-    return <Navigate to="/" replace />;
+    return (
+      <Navigate
+        to="/login"
+        replace
+        state={{ authError: "This account does not have administrator access." }}
+      />
+    );
   }
 
   return children;

@@ -368,6 +368,27 @@ app.get("/alerts/history", requireAdmin, async (req, res) => {
   }
 });
 
+app.delete("/alerts/history", requireAdmin, async (req, res) => {
+  try {
+    const { count, error } = await supabase
+      .from("sos_alerts")
+      .delete({ count: "exact" })
+      .eq("status", "handled");
+
+    if (error) {
+      return failFromDatabase(res, "DELETE /alerts/history", error, "Database error");
+    }
+
+    res.json({
+      success: true,
+      deletedCount: count || 0,
+      message: `${count || 0} resolved history records deleted successfully`,
+    });
+  } catch (err) {
+    return failFromDatabase(res, "DELETE /alerts/history", err, "Database error");
+  }
+});
+
 app.delete("/alerts/:id", requireAdmin, async (req, res) => {
   const { id } = req.params;
 

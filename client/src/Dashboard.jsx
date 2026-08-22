@@ -5,6 +5,7 @@ import {
   fetchActiveAlerts,
   fetchResolvedAlerts,
   resolveAlert,
+  clearResolvedHistory,
 } from "./lib/api";
 import {
   formatCoordinates,
@@ -19,13 +20,17 @@ import {
   AlertTriangle,
   BellRing,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
   History,
   LogOut,
   MapPin,
   Search,
   Settings as SettingsIcon,
   ShieldAlert,
+  Trash2,
   UserRound,
+  X,
 } from "lucide-react";
 
 // Rounded to roughly 10 m so a stationary caller does not reload the embedded
@@ -74,6 +79,37 @@ export default function Dashboard({ focus = "active" }) {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusMessage, setStatusMessage] = useState("Connecting to the alert feed");
   const [addresses, setAddresses] = useState({});
+  const [clearingHistory, setClearingHistory] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteSuccessMsg, setDeleteSuccessMsg] = useState("");
+  const [deleteErrorMsg, setDeleteErrorMsg] = useState("");
+
+  const handleConfirmDeleteHistory = async () => {
+    setClearingHistory(true);
+    setDeleteSuccessMsg("");
+    setDeleteErrorMsg("");
+
+    try {
+      const result = await clearResolvedHistory();
+      setHistory([]);
+      setShowDeleteModal(false);
+      const countText = Number.isFinite(result?.deletedCount)
+        ? ` (${result.deletedCount} record${result.deletedCount === 1 ? "" : "s"} removed)`
+        : "";
+      setDeleteSuccessMsg(`Resolved SOS history deleted successfully${countText}.`);
+      setStatusMessage("Resolved SOS history has been permanently cleared from database");
+      setTimeout(() => setDeleteSuccessMsg(""), 6000);
+    } catch (err) {
+      const errMsg =
+        err?.response?.data?.message ||
+        err?.message ||
+        "Could not delete resolved history from database.";
+      setDeleteErrorMsg(errMsg);
+      setStatusMessage(`Delete failed: ${errMsg}`);
+    } finally {
+      setClearingHistory(false);
+    }
+  };
 
   const knownIdsRef = useRef(new Set());
   const sirenRef = useRef(null);
@@ -264,13 +300,15 @@ export default function Dashboard({ focus = "active" }) {
             return (
               <article
                 key={alert.id}
-                className={`pa-alert-card${isExpanded ? " is-expanded" : ""}`}
+                className={`pa-alert-card pa-alert-card--pending${isExpanded ? " is-expanded" : ""}`}
               >
                 <button
+                  type="button"
                   className="pa-alert-card__trigger"
                   onClick={() =>
                     setSelectedId((current) => (current === alert.id ? null : alert.id))
                   }
+                  aria-expanded={isExpanded}
                 >
                   <div className="pa-alert-card__top">
                     <div className="pa-avatar">
@@ -280,15 +318,23 @@ export default function Dashboard({ focus = "active" }) {
                       <strong>{alert.user_name}</strong>
                       <span>{alert.phone} · {alert.email}</span>
                     </div>
-                    <span className="pa-pill pa-pill--danger">{alert.trigger_type}</span>
+                    <span className="pa-pill pa-pill--pending-status">
+                      PENDING - ACTION REQUIRED
+                    </span>
+                    <span className="pa-pill">{alert.trigger_type}</span>
+                    <span
+                      className="pa-chevron-btn"
+                      title={isExpanded ? "Collapse details" : "Expand details"}
+                    >
+                      {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                    </span>
                   </div>
 
                   <div className="pa-status-row">
                     <span className="pa-pill">{formatTime(alert.created_at)}</span>
                     <span className="pa-pill">{formatCoordinates(alert)}</span>
-                    <span className="pa-pill">{alert.current_status}</span>
-                    <span className="pa-live-dot">
-                      <span /> Live
+                    <span className="pa-live-dot pa-live-dot--pulse">
+                      <span /> ACTIVE / PENDING
                     </span>
                   </div>
                 </button>
@@ -328,7 +374,7 @@ export default function Dashboard({ focus = "active" }) {
                       </div>
                       <div className="pa-expansion-field">
                         <span>Status</span>
-                        <strong>{alert.current_status}</strong>
+                        <strong>ACTIVE / PENDING</strong>
                       </div>
                       <div className="pa-expansion-field">
                         <span>Account</span>
@@ -362,6 +408,7 @@ export default function Dashboard({ focus = "active" }) {
                         <MapPin size={14} /> Open in Google Maps
                       </a>
                       <button
+                        type="button"
                         className="pa-btn pa-btn--success"
                         onClick={(event) => {
                           event.stopPropagation();
@@ -388,22 +435,41 @@ export default function Dashboard({ focus = "active" }) {
           <p className="pa-kicker">History</p>
           <h2>Resolved incidents</h2>
         </div>
-        <label className="pa-search">
-          <Search size={14} />
-          <input
-            value={searchTerm}
-            onChange={(event) => setSearchTerm(event.target.value)}
-            placeholder="Search by name or phone"
-          />
-        </label>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <button
+            type="button"
+            className="pa-btn pa-btn--danger"
+            disabled={history.length === 0 || clearingHistory}
+            onClick={() => setShowDeleteModal(true)}
+            title={history.length === 0 ? "No history to delete" : "Delete all resolved history"}
+          >
+            <Trash2 size={14} />
+            <span>{clearingHistory ? "Deleting…" : "Delete History"}</span>
+          </button>
+          <label className="pa-search">
+            <Search size={14} />
+            <input
+              value={searchTerm}
+              onChange={(event) => setSearchTerm(event.target.value)}
+              placeholder="Search by name or phone"
+            />
+          </label>
+        </div>
       </div>
+
+      {deleteSuccessMsg && (
+        <div style={{ margin: "12px 0 0", padding: "10px 14px", borderRadius: 8, background: "rgba(34, 197, 94, 0.12)", border: "1px solid rgba(34, 197, 94, 0.3)", color: "#4ade80", fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}>
+          <CheckCircle2 size={16} />
+          {deleteSuccessMsg}
+        </div>
+      )}
 
       <div className="pa-history-list">
         {filteredHistory.length === 0 && (
           <div className="pa-empty-card">
             <History size={20} />
-            <h3>No resolved cases yet</h3>
-            <p>Resolved emergencies move here automatically.</p>
+            <h3>No resolved cases</h3>
+            <p>{history.length === 0 ? "No history to delete. Resolved emergencies will appear here." : "No matching historical alerts found."}</p>
           </div>
         )}
 
@@ -558,6 +624,66 @@ export default function Dashboard({ focus = "active" }) {
         {activeSection === "history" && renderHistoryView()}
         {activeSection === "settings" && renderSettingsView()}
       </main>
+
+      {showDeleteModal && (
+        <div className="ks-modal-overlay" onMouseDown={() => setShowDeleteModal(false)}>
+          <div
+            className="ks-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Confirm delete history"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="ks-modal__head">
+              <span className="ks-modal__icon" style={{ background: "rgba(239, 68, 68, 0.15)", color: "#ef4444" }}>
+                <Trash2 size={16} strokeWidth={2} />
+              </span>
+              <h2>Delete Resolved History</h2>
+              <button
+                type="button"
+                className="ks-modal__close"
+                onClick={() => setShowDeleteModal(false)}
+                aria-label="Close"
+              >
+                <X size={16} strokeWidth={2} />
+              </button>
+            </div>
+
+            <div className="ks-modal__body">
+              <p style={{ margin: 0, fontSize: 13.5, color: "var(--text)" }}>
+                Delete all resolved SOS history? This action cannot be undone.
+              </p>
+              <p style={{ margin: 0, fontSize: 12, color: "var(--muted)" }}>
+                Active SOS alerts and user accounts will not be affected.
+              </p>
+              {deleteErrorMsg && (
+                <p style={{ margin: "6px 0 0", fontSize: 12.5, color: "#fca5a5", background: "rgba(220,38,38,0.15)", padding: "8px 10px", borderRadius: 6, border: "1px solid rgba(220,38,38,0.3)" }}>
+                  Error: {deleteErrorMsg}
+                </p>
+              )}
+            </div>
+
+            <div className="ks-modal__foot">
+              <button
+                type="button"
+                className="ks-btn ks-btn--ghost"
+                onClick={() => setShowDeleteModal(false)}
+                disabled={clearingHistory}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="ks-btn ks-btn--danger"
+                onClick={handleConfirmDeleteHistory}
+                disabled={clearingHistory}
+              >
+                {clearingHistory ? "Deleting…" : "Confirm Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

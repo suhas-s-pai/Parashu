@@ -195,38 +195,22 @@ export function AuthProvider({ children }) {
   }, []);
 
   /**
-   * Administrator sign-in. Supabase Auth owns the password; this project only
-   * checks membership of the admins table afterwards. An account that is not
-   * an admin is signed straight back out, so the admin form can never be used
-   * as a side door into a normal session.
+   * Administrator sign-in via Google OAuth.
+   * Supabase Auth manages the Google OAuth session; membership of the public.admins
+   * table is verified after session restoration.
    */
-  const signInAsAdmin = useCallback(async (email, password) => {
+  const signInAsAdmin = useCallback(async () => {
     setAuthError("");
 
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: getRedirectUrl() },
     });
 
     if (error) {
-      setAuthError(error.message || "Those administrator details were not accepted.");
+      setAuthError(error.message || "Google administrator sign-in could not be started.");
       throw error;
     }
-
-    const { data: adminRow } = await supabase
-      .from("admins")
-      .select("user_id")
-      .eq("user_id", data.user.id)
-      .maybeSingle();
-
-    if (!adminRow) {
-      await supabase.auth.signOut();
-      const message = "This account does not have administrator access.";
-      setAuthError(message);
-      throw new Error(message);
-    }
-
-    setAdminRole({ forUserId: data.user.id, isAdmin: true });
   }, []);
 
   const signOut = useCallback(async () => {

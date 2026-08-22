@@ -69,3 +69,8 @@ export async function fetchAlertStatus(phone) {
 export function resolveAlert(id) {
   return api.delete(`/alerts/${id}`);
 }
+
+export async function clearResolvedHistory() {
+  const res = await api.delete("/alerts/history");
+  return res.data;
+}
