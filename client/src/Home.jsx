@@ -230,7 +230,7 @@ export default function Home() {
           accuracy: coords.accuracy,
           updatedAt: Date.now(),
         });
-        await sendSos({
+        const res = await sendSos({
           user_name: user?.name,
           phone: user?.phone,
           email: user?.email || "",
@@ -238,12 +238,19 @@ export default function Home() {
           latitude: coords.latitude,
           longitude: coords.longitude,
         });
+
+        if (res?.data?.status === "handled") {
+          stopTimers();
+          sosActiveRef.current = false;
+          setPhase("handled");
+          setNotice("The control room has closed your emergency.");
+        }
       } catch {
         // A single dropped ping is expected on a moving connection; the next
         // one carries the newest position.
       }
     }, TRACKING_INTERVAL_MS);
-  }, [user?.email, user?.name, user?.phone]);
+  }, [stopTimers, user?.email, user?.name, user?.phone]);
 
   const startStatusPolling = useCallback(() => {
     statusPollRef.current = setInterval(async () => {
@@ -288,6 +295,7 @@ export default function Home() {
         trigger_type: triggerType,
         latitude: coords.latitude,
         longitude: coords.longitude,
+        force_new: true,
       });
 
       setPhase("sent");
