@@ -966,11 +966,8 @@ app.use((req, res, next) => {
   if (
     fs.existsSync(indexPath) &&
     req.accepts("html") &&
-    !req.path.startsWith("/alerts") &&
-    !req.path.startsWith("/admins") &&
-    !req.path.startsWith("/admin-invitations") &&
-    !req.path.startsWith("/admin-requests") &&
-    !req.path.startsWith("/sos")
+    req.headers.accept?.includes("text/html") &&
+    !req.path.startsWith("/assets")
   ) {
     return res.sendFile(indexPath);
   }
