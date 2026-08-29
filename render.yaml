@@ -1,9 +1,10 @@
 services:
   - type: web
     name: parashu-frontend
-    env: static
+    runtime: static
+    rootDir: client
     buildCommand: npm run build
-    staticPublishPath: ./client/dist
+    staticPublishPath: ./dist
     routes:
       - type: rewrite
         source: /*
