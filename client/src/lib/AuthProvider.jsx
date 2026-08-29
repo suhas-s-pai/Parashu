@@ -111,11 +111,16 @@ export function AuthProvider({ children }) {
 
     const resolveRole = async () => {
       try {
-        const { data } = await supabase
-          .from("admins")
-          .select("user_id")
-          .eq("user_id", userId)
-          .maybeSingle();
+        const userEmail = session?.user?.email?.toLowerCase() || "";
+        let query = supabase.from("admins").select("user_id, email");
+
+        if (userEmail) {
+          query = query.or(`user_id.eq.${userId},email.eq.${userEmail}`);
+        } else {
+          query = query.eq("user_id", userId);
+        }
+
+        const { data } = await query.maybeSingle();
 
         if (active) {
           setAdminRole({ forUserId: userId, isAdmin: Boolean(data) });
@@ -132,7 +137,7 @@ export function AuthProvider({ children }) {
     return () => {
       active = false;
     };
-  }, [userId]);
+  }, [userId, session]);
 
   // Signed out accounts need no lookup, so they are ready immediately.
   const roleReady = !userId || adminRole.forUserId === userId;
