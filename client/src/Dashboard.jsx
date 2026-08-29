@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import QRCode from "qrcode";
 import { useAuth } from "./lib/authContext";
 import {
   getAlertStreamUrl,
@@ -10,7 +9,6 @@ import {
   fetchAdmins,
   deleteAdmin,
   generateAdminInvitation,
-  getFrontendBaseUrl,
   fetchAdminRequests,
   approveAdminRequest,
   rejectAdminRequest,
@@ -37,9 +35,7 @@ import {
   History,
   LogOut,
   MapPin,
-  QrCode,
   Search,
-  Share2,
   ShieldAlert,
   ShieldCheck,
   Trash2,
@@ -269,9 +265,7 @@ export default function Dashboard({ focus = "active" }) {
   const [adminsError, setAdminsError] = useState("");
 
   const [showInviteModal, setShowInviteModal] = useState(false);
-  const [, setInviteToken] = useState("");
-  const [inviteUrl, setInviteUrl] = useState("");
-  const [qrDataUrl, setQrDataUrl] = useState("");
+  const [inviteToken, setInviteToken] = useState("");
   const [inviteExpiresAt, setInviteExpiresAt] = useState(null);
   const [inviteCreatedAt, setInviteCreatedAt] = useState(null);
   const [inviteTimeLeft, setInviteTimeLeft] = useState(300);
@@ -502,38 +496,28 @@ export default function Dashboard({ focus = "active" }) {
     setInviteCopied(false);
     try {
       const res = await generateAdminInvitation();
-      const token = res?.token || res?.invitation?.token;
+      const code = res?.code || res?.token || res?.invitation?.code || res?.invitation?.token;
       const expiresAt = Number(
         res?.expiresAt || res?.expires_at || res?.invitation?.expires_at || res?.invitation?.expiresAt
       );
       const createdAtRaw = res?.createdAt || res?.created_at || res?.invitation?.created_at;
       const createdAt = createdAtRaw ? new Date(createdAtRaw).getTime() : expiresAt - 300000;
 
-      if (res?.success && token && Number.isFinite(expiresAt)) {
+      if (res?.success && code && Number.isFinite(expiresAt)) {
         inviteReceivedAtRef.current = Date.now();
-        setInviteToken(token);
-        const baseUrl = getFrontendBaseUrl();
-        const fullUrl = `${baseUrl}/admin/invite/${token}`;
-        setInviteUrl(fullUrl);
+        setInviteToken(code);
         setInviteExpiresAt(expiresAt);
         setInviteCreatedAt(createdAt);
 
-        // Always starts capped at 300 seconds (05:00) at moment of creation
+        // Always starts at exactly 300 seconds (05:00) at moment of creation
         const initialRemaining = Math.min(300, Math.max(0, Math.floor((expiresAt - createdAt) / 1000)));
-        setInviteTimeLeft(initialRemaining);
-
-        const qr = await QRCode.toDataURL(fullUrl, {
-          width: 240,
-          margin: 2,
-          color: { dark: "#0f172a", light: "#ffffff" },
-        });
-        setQrDataUrl(qr);
+        setInviteTimeLeft(initialRemaining > 0 ? initialRemaining : 300);
         setShowInviteModal(true);
       } else {
-        setStatusMessage("Failed to generate admin invitation.");
+        setStatusMessage("Failed to generate admin invitation code.");
       }
     } catch {
-      setStatusMessage("Failed to generate admin invitation.");
+      setStatusMessage("Failed to generate admin invitation code.");
     } finally {
       setInviteLoading(false);
     }
@@ -569,29 +553,13 @@ export default function Dashboard({ focus = "active" }) {
     return () => clearInterval(timer);
   }, [showInviteModal, inviteExpiresAt, inviteCreatedAt]);
 
-  const handleCopyInviteUrl = async () => {
+  const handleCopyCode = async () => {
     try {
-      await navigator.clipboard.writeText(inviteUrl);
+      await navigator.clipboard.writeText(inviteToken);
       setInviteCopied(true);
       setTimeout(() => setInviteCopied(false), 3000);
     } catch {
       // Fallback
-    }
-  };
-
-  const handleShareInviteUrl = async () => {
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title: "Parashu Admin Invitation",
-          text: "Scan or open this link to request Parashu Administrator access:",
-          url: inviteUrl,
-        });
-      } catch {
-        // Share cancelled
-      }
-    } else {
-      handleCopyInviteUrl();
     }
   };
 
@@ -952,8 +920,8 @@ export default function Dashboard({ focus = "active" }) {
           onClick={handleGenerateInvitation}
           disabled={inviteLoading}
         >
-          <QrCode size={16} strokeWidth={1.9} />
-          <span>{inviteLoading ? "Generating QR…" : "Add New Admin"}</span>
+          <UserRound size={16} strokeWidth={1.9} />
+          <span>{inviteLoading ? "Generating Code…" : "Add New Admin"}</span>
         </button>
       </div>
 
@@ -1216,66 +1184,53 @@ export default function Dashboard({ focus = "active" }) {
         </div>
       )}
 
-      {/* Admin QR Invitation Modal */}
+      {/* Admin 6-Digit Code Invitation Modal */}
       {showInviteModal && (
         <div className="pa-modal-overlay">
-          <div className="pa-modal pa-modal--invite" style={{ maxWidth: 440, textAlign: "center" }}>
-            <div className="pa-modal__head" style={{ justifyContent: "center", marginBottom: 12 }}>
-              <QrCode size={24} style={{ color: "#38bdf8" }} />
+          <div className="pa-modal pa-modal--invite" style={{ maxWidth: 420, textAlign: "center" }}>
+            <div className="pa-modal__head" style={{ justifyContent: "center", marginBottom: 8 }}>
+              <UserRound size={22} style={{ color: "#38bdf8" }} />
               <h3 style={{ margin: 0 }}>Invite New Administrator</h3>
             </div>
 
             <div className="pa-modal__body" style={{ padding: "8px 0 16px" }}>
-              <p style={{ margin: "0 0 16px", fontSize: 13, color: "#94a3b8" }}>
-                Scan this QR code or share the invitation link with the person you want to add as an administrator.
+              <p style={{ margin: "0 0 14px", fontSize: 13, color: "#94a3b8" }}>
+                Generate a temporary admin login code and share it with the person you want to add.
               </p>
 
-              {/* QR Code Container */}
-              {qrDataUrl && (
-                <div style={{ background: "#ffffff", padding: 12, borderRadius: 16, display: "inline-block", boxShadow: "0 8px 24px rgba(0, 0, 0, 0.4)" }}>
-                  <img src={qrDataUrl} alt="Admin Invite QR Code" style={{ width: 200, height: 200, display: "block" }} />
-                </div>
-              )}
-
-              {/* Expiration Countdown Timer */}
-              <div style={{ margin: "16px 0 12px", display: "inline-flex", alignItems: "center", gap: 6, background: "rgba(239, 68, 68, 0.12)", border: "1px solid rgba(239, 68, 68, 0.3)", padding: "6px 14px", borderRadius: 999, color: "#f87171", fontSize: 13, fontWeight: 700 }}>
-                <Clock size={14} />
-                <span>
-                  Expires in: {Math.floor(inviteTimeLeft / 60).toString().padStart(2, "0")}:{(inviteTimeLeft % 60).toString().padStart(2, "0")}
+              {/* 4-Digit Code Display */}
+              <div style={{ background: "rgba(15, 23, 42, 0.8)", border: "1px solid rgba(56, 189, 248, 0.3)", padding: "16px 24px", borderRadius: 12, margin: "8px auto 14px", display: "inline-block", boxShadow: "0 4px 20px rgba(0, 0, 0, 0.3)" }}>
+                <span style={{ fontSize: 34, fontWeight: 800, letterSpacing: "0.2em", color: "#38bdf8", fontFamily: "monospace" }}>
+                  {inviteToken || "----"}
                 </span>
               </div>
 
+              {/* Expiration Countdown Timer */}
+              <div>
+                <div style={{ margin: "4px 0 8px", display: "inline-flex", alignItems: "center", gap: 6, background: "rgba(239, 68, 68, 0.12)", border: "1px solid rgba(239, 68, 68, 0.3)", padding: "6px 14px", borderRadius: 999, color: "#f87171", fontSize: 13, fontWeight: 700 }}>
+                  <Clock size={14} />
+                  <span>
+                    Expires in: {Math.floor(inviteTimeLeft / 60).toString().padStart(2, "0")}:{(inviteTimeLeft % 60).toString().padStart(2, "0")}
+                  </span>
+                </div>
+              </div>
+
               {inviteTimeLeft <= 0 && (
-                <div style={{ color: "#ef4444", fontSize: 12, fontWeight: 600, marginBottom: 8 }}>
-                  This invitation link has expired. Please generate a new one.
+                <div style={{ color: "#ef4444", fontSize: 12, fontWeight: 600, marginTop: 4 }}>
+                  This invitation code has expired. Please generate a new one.
                 </div>
               )}
-
-              {/* Unique Invitation URL Display */}
-              <div style={{ background: "rgba(15, 23, 42, 0.6)", border: "1px solid rgba(255, 255, 255, 0.1)", padding: "8px 12px", borderRadius: 8, fontSize: 12, wordBreak: "break-all", color: "#38bdf8", fontFamily: "monospace", margin: "8px 0 16px" }}>
-                {inviteUrl}
-              </div>
             </div>
 
             <div className="pa-modal__actions" style={{ justifyContent: "center", gap: 12 }}>
               <button
                 type="button"
                 className="pa-btn pa-btn--primary"
-                onClick={handleShareInviteUrl}
-                disabled={inviteTimeLeft <= 0}
-              >
-                <Share2 size={14} />
-                <span>Share Link</span>
-              </button>
-
-              <button
-                type="button"
-                className="pa-btn pa-btn--ghost"
-                onClick={handleCopyInviteUrl}
+                onClick={handleCopyCode}
                 disabled={inviteTimeLeft <= 0}
               >
                 <Copy size={14} />
-                <span>{inviteCopied ? "Copied!" : "Copy Link"}</span>
+                <span>{inviteCopied ? "Copied!" : "Copy Code"}</span>
               </button>
 
               <button

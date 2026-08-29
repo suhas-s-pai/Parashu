@@ -107,6 +107,11 @@ export async function generateAdminInvitation() {
   return res.data;
 }
 
+export async function submitAdminInviteCode(payload) {
+  const res = await api.post("/admin-invitations/use-code", payload);
+  return res.data;
+}
+
 export async function verifyAdminInvitation(token) {
   const res = await api.get(`/admin-invitations/verify/${encodeURIComponent(token)}`);
   return res.data;

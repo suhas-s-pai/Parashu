@@ -10,6 +10,7 @@ import {
   Lock,
 } from "lucide-react";
 import { useAuth } from "./lib/authContext";
+import { submitAdminInviteCode } from "./lib/api";
 
 // The real multi-color "G" mark, inline so it renders without a network
 // request to Google's asset CDN.
@@ -116,6 +117,11 @@ export default function Login() {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [guestError, setGuestError] = useState("");
+  const [adminGmail, setAdminGmail] = useState("");
+  const [adminCode, setAdminCode] = useState("");
+  const [codeError, setCodeError] = useState("");
+  const [codeSuccess, setCodeSuccess] = useState("");
+  const [joining, setJoining] = useState(false);
 
   const displayError = location.state?.authError || authError;
 
@@ -172,6 +178,49 @@ export default function Login() {
       await signInAsAdmin();
     } catch {
       setPending("");
+    }
+  };
+
+  const handleJoinAsAdmin = async (e) => {
+    e.preventDefault();
+    setCodeError("");
+    setCodeSuccess("");
+
+    if (!adminGmail.trim() || !adminGmail.includes("@")) {
+      setCodeError("Invalid or expired administrator code.");
+      return;
+    }
+
+    const cleanCode = adminCode.trim();
+    if (cleanCode.length !== 4) {
+      setCodeError("Invalid or expired administrator code.");
+      return;
+    }
+
+    setJoining(true);
+
+    try {
+      const res = await submitAdminInviteCode({
+        email: adminGmail.trim(),
+        code: cleanCode,
+      });
+
+      if (res?.success) {
+        setCodeSuccess("Code verified! Redirecting to Google login to enter Control Room…");
+        setTimeout(async () => {
+          try {
+            await signInAsAdmin();
+          } catch {
+            setJoining(false);
+          }
+        }, 1200);
+      } else {
+        setCodeError(res?.message || "Invalid or expired administrator code.");
+        setJoining(false);
+      }
+    } catch {
+      setCodeError("Invalid or expired administrator code.");
+      setJoining(false);
     }
   };
 
@@ -395,11 +444,61 @@ export default function Login() {
                 type="button"
                 className="ks-google"
                 onClick={handleAdminClick}
-                disabled={Boolean(pending)}
+                disabled={Boolean(pending) || joining}
               >
                 <GoogleMark />
                 {pending === "admin" ? "Redirecting to Google…" : "Continue with Google"}
               </button>
+
+              <div className="ks-auth__divider" style={{ margin: "20px 0 16px" }}>
+                New Administrator?
+              </div>
+
+              <form onSubmit={handleJoinAsAdmin} className="ks-auth__fields" style={{ display: "grid", gap: 14 }}>
+                <label className="ks-field">
+                  <span className="ks-field__label">Gmail</span>
+                  <input
+                    className="ks-input"
+                    type="email"
+                    placeholder="Enter your Gmail"
+                    value={adminGmail}
+                    onChange={(e) => setAdminGmail(e.target.value)}
+                    autoComplete="email"
+                    required
+                  />
+                </label>
+
+                <label className="ks-field">
+                  <span className="ks-field__label">Admin Login Code</span>
+                  <input
+                    className="ks-input"
+                    type="text"
+                    maxLength={4}
+                    placeholder="Enter 4-digit code"
+                    value={adminCode}
+                    onChange={(e) => setAdminCode(e.target.value.replace(/\D/g, ""))}
+                    style={{ letterSpacing: "0.15em", fontFamily: "monospace", fontWeight: 700 }}
+                    required
+                  />
+                </label>
+
+                {codeError && <p className="ks-authcard__error">{codeError}</p>}
+                {codeSuccess && (
+                  <p style={{ color: "#22c55e", fontSize: 13, textAlign: "center", margin: 0 }}>
+                    {codeSuccess}
+                  </p>
+                )}
+
+                <button
+                  type="submit"
+                  className="ks-btn ks-btn--danger pa-selection-card__btn"
+                  style={{ width: "100%", justifyContent: "center", marginTop: 4 }}
+                  disabled={joining || Boolean(pending)}
+                >
+                  <span>{joining ? "Verifying Code…" : "Join as Administrator"}</span>
+                  <ArrowRight size={15} strokeWidth={2} />
+                </button>
+              </form>
             </div>
           </div>
         )}

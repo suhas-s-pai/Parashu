@@ -49,30 +49,35 @@ function hashPassword(password) {
 }
 
 function createInvitation(adminId) {
-  const token = crypto.randomBytes(24).toString("hex");
+  // Generate random 4-digit numeric code (1000-9999)
+  const code = String(Math.floor(1000 + Math.random() * 9000));
+  const token = code;
   const now = Date.now();
   const expiresAt = now + 5 * 60 * 1000; // Exactly 5 minutes server-side
 
   const invitation = {
     id: crypto.randomUUID(),
+    code,
     token,
     created_by_admin: adminId || null,
     created_at: new Date(now).toISOString(),
     expires_at: expiresAt,
-    status: "active", // active | requested | expired
+    status: "active", // active | used | expired
   };
 
+  store.invitations[code] = invitation;
   store.invitations[token] = invitation;
   saveStore();
   return invitation;
 }
 
-function getInvitation(token) {
-  if (!token || !store.invitations[token]) {
+function getInvitation(tokenOrCode) {
+  const key = String(tokenOrCode || "").trim();
+  if (!key || !store.invitations[key]) {
     return { error: "INVITATION_NOT_FOUND", valid: false };
   }
 
-  const inv = store.invitations[token];
+  const inv = store.invitations[key];
   const now = Date.now();
 
   if (now > inv.expires_at || inv.status === "expired") {
@@ -87,6 +92,43 @@ function getInvitation(token) {
 
   const remainingSeconds = Math.max(0, Math.floor((inv.expires_at - now) / 1000));
   return { valid: true, invitation: inv, remainingSeconds };
+}
+
+function useCode(code, email) {
+  const cleanCode = String(code || "").trim();
+  const cleanEmail = String(email || "").trim().toLowerCase();
+
+  if (cleanCode.length !== 4) {
+    return { success: false, error: "INVITATION_INVALID" };
+  }
+
+  const check = getInvitation(cleanCode);
+  if (!check.valid || !check.invitation) {
+    return { success: false, error: check.error || "INVITATION_INVALID" };
+  }
+
+  const inv = check.invitation;
+  inv.status = "used";
+  inv.used_at = new Date().toISOString();
+  inv.used_by_email = cleanEmail;
+
+  // Add request record for admin directory visibility
+  const requestId = crypto.randomUUID();
+  const request = {
+    id: requestId,
+    invitation_id: inv.id,
+    token: inv.code,
+    name: cleanEmail.split("@")[0] || "Administrator",
+    email: cleanEmail,
+    status: "approved",
+    created_at: new Date().toISOString(),
+    approved_at: new Date().toISOString(),
+  };
+
+  store.requests[requestId] = request;
+  saveStore();
+
+  return { success: true, invitation: inv, request };
 }
 
 function submitRequest(token, name, email, password) {
@@ -153,6 +195,7 @@ function updateRequestStatus(id, status) {
 module.exports = {
   createInvitation,
   getInvitation,
+  useCode,
   submitRequest,
   getPendingRequests,
   getRequestById,

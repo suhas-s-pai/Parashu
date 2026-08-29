@@ -716,13 +716,82 @@ app.post("/admin-invitations/generate", requireAdmin, async (req, res) => {
     const invitation = invitationStore.createInvitation(req.authUser?.id);
     return res.json({
       success: true,
-      token: invitation.token,
+      code: invitation.code,
+      token: invitation.code,
       expiresAt: invitation.expires_at,
       expires_at: invitation.expires_at,
       invitation,
     });
   } catch (err) {
     return fail(res, 500, "Could not generate admin invitation", "SERVER_ERROR");
+  }
+});
+
+app.post("/admin-invitations/use-code", async (req, res) => {
+  const { email, code } = req.body || {};
+
+  if (
+    !email ||
+    typeof email !== "string" ||
+    !email.includes("@") ||
+    !code ||
+    typeof code !== "string" ||
+    code.trim().length !== 4
+  ) {
+    return fail(res, 400, "Invalid or expired administrator code.", "INVALID_CODE");
+  }
+
+  const cleanEmail = email.trim().toLowerCase();
+  const cleanCode = code.trim();
+
+  try {
+    const result = invitationStore.useCode(cleanCode, cleanEmail);
+
+    if (!result.success) {
+      return fail(res, 400, "Invalid or expired administrator code.", "INVALID_CODE");
+    }
+
+    // Authorize/create that Gmail as an administrator in Supabase Auth & public.admins table
+    let userId = null;
+    try {
+      const { data: createData, error: createErr } = await supabase.auth.admin.createUser({
+        email: cleanEmail,
+        email_confirm: true,
+        user_metadata: { full_name: cleanEmail.split("@")[0], name: cleanEmail.split("@")[0] },
+      });
+
+      if (createData?.user?.id) {
+        userId = createData.user.id;
+      } else if (createErr) {
+        const { data: listData } = await supabase.auth.admin.listUsers();
+        const existingUser = listData?.users?.find(
+          (u) => u.email?.toLowerCase() === cleanEmail
+        );
+        if (existingUser) {
+          userId = existingUser.id;
+        }
+      }
+    } catch (e) {
+      console.warn("[use-code] auth create/lookup warning:", e?.message);
+    }
+
+    if (userId) {
+      try {
+        await supabase.from("admins").insert({
+          user_id: userId,
+          email: cleanEmail,
+        });
+      } catch (e) {
+        console.warn("[use-code] db admins insert warning:", e?.message);
+      }
+    }
+
+    return res.json({
+      success: true,
+      message: "Administrator code verified and account authorized successfully.",
+    });
+  } catch (err) {
+    return fail(res, 500, "Could not verify administrator code", "SERVER_ERROR");
   }
 });
 
