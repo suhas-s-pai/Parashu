@@ -72,8 +72,9 @@ export function sendSos(payload) {
   return api.post("/sos", payload);
 }
 
-export async function fetchAlertStatus(phone) {
-  const res = await api.get(`/alert-status/${encodeURIComponent(phone)}`);
+export async function fetchAlertStatus(identifier) {
+  if (!identifier) return { status: "handled" };
+  const res = await api.get(`/alert-status/${encodeURIComponent(identifier)}`);
   return res.data;
 }
 

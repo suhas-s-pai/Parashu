@@ -309,51 +309,143 @@ app.post("/sos", requireUser, async (req, res) => {
 
   const { name, phone, latitude, longitude, email, trigger_type } = payload.value;
   const userId = req.authUser.id;
+  const rawAlertId = req.body?.alert_id || req.body?.id;
+  const alertId =
+    typeof rawAlertId === "string" && UUID_PATTERN.test(rawAlertId.trim())
+      ? rawAlertId.trim()
+      : null;
+  const forceNew = Boolean(req.body?.force_new || req.body?.is_new_sos);
 
   try {
-    let updateQuery = supabase
+    // 1. If a specific alert ID was sent by the client, check that record first
+    if (alertId) {
+      const { data: targetAlert, error: targetError } = await supabase
+        .from("sos_alerts")
+        .select("id, status")
+        .eq("id", alertId)
+        .maybeSingle();
+
+      if (!targetError && targetAlert) {
+        if (targetAlert.status === "handled") {
+          return res.json({
+            message: "Emergency has been resolved",
+            id: targetAlert.id,
+            status: "handled",
+          });
+        }
+
+        if (targetAlert.status === "active") {
+          const { error: updateTargetError } = await supabase
+            .from("sos_alerts")
+            .update({ latitude, longitude, updated_at: new Date().toISOString() })
+            .eq("id", alertId);
+
+          if (updateTargetError) {
+            return failFromDatabase(res, "POST /sos update target", updateTargetError, "Update error");
+          }
+
+          await broadcastActiveAlerts();
+          return res.json({
+            message: "Location updated",
+            id: targetAlert.id,
+            status: "active",
+          });
+        }
+      }
+    }
+
+    // 2. Look up any open active alert for this user/phone
+    let activeQuery = supabase
       .from("sos_alerts")
-      .update({ latitude, longitude, updated_at: new Date().toISOString() }, { count: "exact" })
-      .eq("status", "active");
+      .select("id, status")
+      .eq("status", "active")
+      .order("created_at", { ascending: false })
+      .limit(1);
 
     if (phone && phone !== "Not provided") {
-      updateQuery = updateQuery.or(`user_id.eq.${userId},phone.eq.${phone}`);
+      activeQuery = activeQuery.or(`user_id.eq.${userId},phone.eq.${phone}`);
     } else {
-      updateQuery = updateQuery.eq("user_id", userId);
+      activeQuery = activeQuery.eq("user_id", userId);
     }
 
-    const { count, error: updateError } = await updateQuery;
+    const { data: activeAlerts, error: activeError } = await activeQuery;
 
-    if (updateError) {
-      return failFromDatabase(res, "POST /sos update", updateError, "Update error");
-    }
+    if (!activeError && activeAlerts && activeAlerts.length > 0) {
+      const activeAlert = activeAlerts[0];
+      const { error: updateActiveError } = await supabase
+        .from("sos_alerts")
+        .update({ latitude, longitude, updated_at: new Date().toISOString() })
+        .eq("id", activeAlert.id);
 
-    if (count > 0) {
+      if (updateActiveError) {
+        return failFromDatabase(res, "POST /sos update active", updateActiveError, "Update error");
+      }
+
       await broadcastActiveAlerts();
-      return res.json({ message: "Location updated" });
+      return res.json({
+        message: "Location updated",
+        id: activeAlert.id,
+        status: "active",
+      });
     }
 
-    const { error: insertError } = await supabase.from("sos_alerts").insert({
-      user_id: userId,
-      name,
-      email: email || req.authUser.email || "",
-      phone,
-      latitude,
-      longitude,
-      trigger_type,
-    });
+    // 3. No active alert exists.
+    // Background location tracking updates MUST NEVER create a new alert.
+    if (!forceNew) {
+      return res.json({
+        message: "Emergency has been resolved",
+        status: "handled",
+      });
+    }
+
+    // 4. User explicitly pressed SOS button (forceNew === true): create a new emergency
+    const { data: insertedAlert, error: insertError } = await supabase
+      .from("sos_alerts")
+      .insert({
+        user_id: userId,
+        name,
+        email: email || req.authUser.email || "",
+        phone,
+        latitude,
+        longitude,
+        trigger_type,
+      })
+      .select("id, status")
+      .single();
 
     if (insertError) {
       if (insertError.code === "23505") {
-        await broadcastActiveAlerts();
-        return res.json({ message: "Location updated" });
+        const { data: fallbackAlerts } = await supabase
+          .from("sos_alerts")
+          .select("id, status")
+          .eq("status", "active")
+          .eq("phone", phone)
+          .limit(1);
+
+        if (fallbackAlerts && fallbackAlerts.length > 0) {
+          await supabase
+            .from("sos_alerts")
+            .update({ latitude, longitude, updated_at: new Date().toISOString() })
+            .eq("id", fallbackAlerts[0].id);
+
+          await broadcastActiveAlerts();
+          return res.json({
+            message: "Location updated",
+            id: fallbackAlerts[0].id,
+            status: "active",
+          });
+        }
       }
 
       return failFromDatabase(res, "POST /sos insert", insertError, "Insert error");
     }
 
     await broadcastActiveAlerts();
-    return res.json({ message: "SOS alert created" });
+    return res.json({
+      message: "SOS alert created",
+      id: insertedAlert?.id,
+      status: "active",
+    });
   } catch (err) {
     return failFromDatabase(res, "POST /sos", err, "Database error");
   }
@@ -578,26 +670,35 @@ app.delete("/admins/:id", requireAdmin, async (req, res) => {
 
 // Polled by the person who raised the alert, to learn when it was closed.
 app.get("/alert-status/:phone", requireUser, async (req, res) => {
-  const phone = readText(req.params.phone, "phone", MAX_PHONE_LENGTH);
+  const paramVal = String(req.params.phone || "").trim();
 
-  if (phone.error) {
-    return fail(res, 400, phone.error, "VALIDATION_ERROR");
+  if (!paramVal) {
+    return fail(res, 400, "Identifier is required", "VALIDATION_ERROR");
   }
 
   try {
-    const { data, error } = await supabase
+    let query = supabase
       .from("sos_alerts")
-      .select("status")
-      .eq("phone", phone.value)
+      .select("id, status, created_at")
       .order("created_at", { ascending: false })
       .limit(1);
+
+    if (UUID_PATTERN.test(paramVal)) {
+      query = query.eq("id", paramVal);
+    } else if (paramVal && paramVal !== "Not provided") {
+      query = query.or(`user_id.eq.${req.authUser.id},phone.eq.${paramVal}`);
+    } else {
+      query = query.eq("user_id", req.authUser.id);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       return failFromDatabase(res, "GET /alert-status/:phone", error, "Database error");
     }
 
-    if (data.length === 0) {
-      return res.json({ status: "active" });
+    if (!data || data.length === 0) {
+      return res.json({ status: "handled" });
     }
 
     res.json(data[0]);

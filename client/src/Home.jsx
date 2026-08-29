@@ -202,6 +202,7 @@ export default function Home() {
   const trackingRef = useRef(null);
   const statusPollRef = useRef(null);
   const sosActiveRef = useRef(false);
+  const activeAlertIdRef = useRef(null);
   const autoEnableAttemptedRef = useRef(false);
   // Speech callbacks are bound once when recognition starts, so they call
   // through a ref to always reach the current handler.
@@ -216,10 +217,10 @@ export default function Home() {
     clearInterval(statusPollRef.current);
     trackingRef.current = null;
     statusPollRef.current = null;
+    activeAlertIdRef.current = null;
   }, []);
 
-  // The backend only updates coordinates on an open alert, so the trigger type
-  // is carried through in case a ping ever has to recreate the row.
+  // The backend updates coordinates on an open alert.
   const startLiveTracking = useCallback((triggerType) => {
     trackingRef.current = setInterval(async () => {
       try {
@@ -231,6 +232,7 @@ export default function Home() {
           updatedAt: Date.now(),
         });
         const res = await sendSos({
+          alert_id: activeAlertIdRef.current,
           user_name: user?.name,
           phone: user?.phone,
           email: user?.email || "",
@@ -238,6 +240,10 @@ export default function Home() {
           latitude: coords.latitude,
           longitude: coords.longitude,
         });
+
+        if (res?.data?.id && !activeAlertIdRef.current) {
+          activeAlertIdRef.current = res.data.id;
+        }
 
         if (res?.data?.status === "handled") {
           stopTimers();
@@ -255,7 +261,9 @@ export default function Home() {
   const startStatusPolling = useCallback(() => {
     statusPollRef.current = setInterval(async () => {
       try {
-        const data = await fetchAlertStatus(user?.phone);
+        const identifier = activeAlertIdRef.current || user?.phone;
+        if (!identifier) return;
+        const data = await fetchAlertStatus(identifier);
         if (data?.status === "handled") {
           stopTimers();
           sosActiveRef.current = false;
@@ -288,7 +296,7 @@ export default function Home() {
         updatedAt: Date.now(),
       });
 
-      await sendSos({
+      const res = await sendSos({
         user_name: user?.name || "User",
         phone: user?.phone || "",
         email: user?.email || "",
@@ -298,12 +306,17 @@ export default function Home() {
         force_new: true,
       });
 
+      if (res?.data?.id) {
+        activeAlertIdRef.current = res.data.id;
+      }
+
       setPhase("sent");
       setNotice("Your location is being shared with the control room.");
       startLiveTracking(triggerType);
       startStatusPolling();
     } catch (error) {
       sosActiveRef.current = false;
+      activeAlertIdRef.current = null;
       setPhase("failed");
       setNotice(
         error?.response?.data?.message ||
