@@ -152,13 +152,24 @@ function NearbyHospitalsList({ alert }) {
 
         if (!isMounted) return;
 
-        setHospitals(data || []);
-        if (!data || data.length === 0) {
-          setError("No nearby hospitals found.");
+        const within5km = (data || [])
+          .map((item) => {
+            const distanceKm =
+              typeof item.distanceKm === "number"
+                ? item.distanceKm
+                : getDistanceKm(latitude, longitude, item.lat, item.lon);
+            return { ...item, distanceKm };
+          })
+          .filter((item) => Number.isFinite(item.distanceKm) && item.distanceKm <= 5)
+          .sort((a, b) => a.distanceKm - b.distanceKm);
+
+        setHospitals(within5km);
+        if (within5km.length === 0) {
+          setError("No hospitals found within 5 km.");
         }
       } catch {
         if (isMounted) {
-          setError("Unable to load nearby hospitals right now.");
+          setError("No hospitals found within 5 km.");
         }
       } finally {
         if (isMounted) setLoading(false);
