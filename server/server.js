@@ -27,6 +27,11 @@ const MAX_NAME_LENGTH = 120;
 const MAX_PHONE_LENGTH = 32;
 const MAX_EMAIL_LENGTH = 254;
 const MAX_TRIGGER_LENGTH = 48;
+const NEARBY_RADIUS_METERS = 5000;
+const OVERPASS_ENDPOINTS = [
+  "https://overpass-api.de/api/interpreter",
+  "https://overpass.kumi.systems/api/interpreter",
+];
 
 const MIGRATION_HINT =
   "Database is missing a column. Run server/migrations/001_admins_and_emergency_fields.sql in the Supabase SQL editor.";
@@ -97,6 +102,97 @@ function readCoordinate(value, label, limit) {
   }
 
   return { value: number };
+}
+
+function getDistanceKm(lat1, lon1, lat2, lon2) {
+  const earthRadiusKm = 6371;
+  const toRadians = (value) => value * (Math.PI / 180);
+  const dLat = toRadians(lat2 - lat1);
+  const dLon = toRadians(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRadians(lat1)) *
+      Math.cos(toRadians(lat2)) *
+      Math.sin(dLon / 2) ** 2;
+
+  return earthRadiusKm * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function normalizeFacility(item, latitude, longitude) {
+  const tags = item?.tags || {};
+  const lat = Number(item?.lat ?? item?.center?.lat);
+  const lon = Number(item?.lon ?? item?.center?.lon);
+  const localizedName = Object.entries(tags).find(
+    ([key, value]) => key.startsWith("name:") && value
+  )?.[1];
+  const name = tags.name || tags["name:en"] || localizedName;
+
+  if (!name || !Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+
+  const distanceKm = getDistanceKm(latitude, longitude, lat, lon);
+  if (distanceKm > NEARBY_RADIUS_METERS / 1000) return null;
+
+  const address =
+    tags["addr:full"] ||
+    [
+      tags["addr:housenumber"],
+      tags["addr:street"],
+      tags["addr:suburb"],
+      tags["addr:city"],
+      tags["addr:postcode"],
+    ].filter(Boolean).join(", ");
+
+  return {
+    id: `${item.type}-${item.id}`,
+    name,
+    address,
+    phone: tags.phone || tags["contact:phone"] || tags["emergency:phone"] || null,
+    distanceKm,
+    lat,
+    lon,
+    type: tags.amenity === "police" ? "police" : "hospital",
+  };
+}
+
+async function requestNearbyFacilities(latitude, longitude) {
+  const query = `
+    [out:json][timeout:20];
+    (
+      nwr["amenity"~"^(hospital|clinic|police)$"]["name"](around:${NEARBY_RADIUS_METERS},${latitude},${longitude});
+      nwr["healthcare"~"^(hospital|clinic)$"]["name"](around:${NEARBY_RADIUS_METERS},${latitude},${longitude});
+    );
+    out center 80;
+  `;
+  let lastError;
+
+  for (const endpoint of OVERPASS_ENDPOINTS) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 22000);
+
+    try {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+          "User-Agent": "Parashu-Safety-Platform/1.0",
+        },
+        body: new URLSearchParams({ data: query }),
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        throw new Error(`Overpass returned ${response.status}`);
+      }
+
+      return response.json();
+    } catch (error) {
+      lastError = error;
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  throw lastError || new Error("OpenStreetMap facility lookup failed");
 }
 
 function readOptionalText(value, maxLength, fallback = "") {
@@ -272,6 +368,44 @@ async function setupRealtime() {
 
 app.get("/", (req, res) => {
   res.send("Parashu backend running");
+});
+
+// Both the user and control-room views use this single OpenStreetMap result,
+// so the names, coordinates and distance shown in each interface stay aligned.
+app.get("/alerts/nearby-facilities", requireUser, async (req, res) => {
+  const latitude = readCoordinate(req.query.lat, "lat", 90);
+  const longitude = readCoordinate(req.query.lon, "lon", 180);
+
+  if (latitude.error || longitude.error) {
+    return fail(
+      res,
+      400,
+      latitude.error || longitude.error,
+      "VALIDATION_ERROR"
+    );
+  }
+
+  try {
+    const data = await requestNearbyFacilities(latitude.value, longitude.value);
+    const facilities = (data.elements || [])
+      .map((item) => normalizeFacility(item, latitude.value, longitude.value))
+      .filter(Boolean)
+      .sort((a, b) => a.distanceKm - b.distanceKm);
+
+    return res.json({
+      radiusKm: NEARBY_RADIUS_METERS / 1000,
+      hospitals: facilities.filter((facility) => facility.type === "hospital").slice(0, 12),
+      policeStations: facilities.filter((facility) => facility.type === "police").slice(0, 12),
+    });
+  } catch (error) {
+    console.error("[nearby-facilities] OpenStreetMap lookup failed", error);
+    return fail(
+      res,
+      502,
+      "Unable to load nearby facilities right now.",
+      "FACILITY_LOOKUP_FAILED"
+    );
+  }
 });
 
 // Control room feed. Admin only — this streams live positions.

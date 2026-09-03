@@ -12,7 +12,7 @@ import {
   fetchAdminRequests,
   approveAdminRequest,
   rejectAdminRequest,
-  fetchNearbyHospitals,
+  fetchNearbyFacilities,
 } from "./lib/api";
 import {
   formatCoordinates,
@@ -67,176 +67,168 @@ const PAGE_TITLES = {
 };
 
 function getDistanceKm(lat1, lon1, lat2, lon2) {
-  const R = 6371;
-  const dLat = (lat2 - lat1) * (Math.PI / 180);
-  const dLon = (lon2 - lon1) * (Math.PI / 180);
+  const earthRadiusKm = 6371;
+  const toRadians = (value) => value * (Math.PI / 180);
+  const dLat = toRadians(lat2 - lat1);
+  const dLon = toRadians(lon2 - lon1);
   const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(lat1 * (Math.PI / 180)) *
-      Math.cos(lat2 * (Math.PI / 180)) *
-      Math.sin(dLon / 2) *
-      Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRadians(lat1)) *
+      Math.cos(toRadians(lat2)) *
+      Math.sin(dLon / 2) ** 2;
+
+  return earthRadiusKm * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-// Component to fetch and display nearby emergency medical facilities / hospitals for an SOS alert
-function NearbyHospitalsList({ alert }) {
-  const [hospitals, setHospitals] = useState([]);
+function FacilityCards({ facilities, emptyMessage }) {
+  if (facilities.length === 0) {
+    return <div className="pa-hospitals-status">{emptyMessage}</div>;
+  }
+
+  return (
+    <div className="pa-hospitals-list">
+      {facilities.map((facility) => (
+        <div key={facility.id} className="pa-hospital-card">
+          <div className="pa-hospital-info">
+            <div className="pa-hospital-name">{facility.name}</div>
+            <div className="pa-hospital-addr">
+              {facility.address || "Address available on map"}
+            </div>
+            {facility.phone && (
+              <div className="pa-hospital-phone">📞 {facility.phone}</div>
+            )}
+          </div>
+          <div className="pa-hospital-side">
+            <span className="pa-hospital-dist">
+              {facility.distanceKm < 1
+                ? `${Math.round(facility.distanceKm * 1000)} m`
+                : `${facility.distanceKm.toFixed(1)} km`}
+            </span>
+            <a
+              href={`https://www.google.com/maps/search/?api=1&query=${facility.lat},${facility.lon}`}
+              target="_blank"
+              rel="noreferrer"
+              className="pa-hospital-map-link"
+            >
+              View on Map
+            </a>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// One request supplies both lists and is tied to coordinate primitives so the
+// five-second alert refresh does not restart a lookup that is still in flight.
+function NearbyFacilitiesList({ alert }) {
+  const latitude = alert?.latitude;
+  const longitude = alert?.longitude;
+  const alertId = alert?.id;
+  const [facilities, setFacilities] = useState({
+    hospitals: [],
+    policeStations: [],
+  });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const lookupRef = useRef(null);
 
   useEffect(() => {
-    if (!alert || !Number.isFinite(alert.latitude) || !Number.isFinite(alert.longitude)) {
+    if (!alertId || !Number.isFinite(latitude) || !Number.isFinite(longitude)) {
       return;
     }
 
     let isMounted = true;
+    const previousLookup = lookupRef.current;
+    const movedKm = previousLookup
+      ? getDistanceKm(
+          previousLookup.latitude,
+          previousLookup.longitude,
+          latitude,
+          longitude
+        )
+      : Infinity;
+
+    if (
+      !previousLookup ||
+      previousLookup.alertId !== alertId ||
+      movedKm >= 1 ||
+      !previousLookup.promise
+    ) {
+      lookupRef.current = {
+        alertId,
+        latitude,
+        longitude,
+        promise: fetchNearbyFacilities(latitude, longitude),
+      };
+    }
+
+    const activeLookup = lookupRef.current;
     setLoading(true);
     setError("");
 
-    const loadHospitals = async () => {
+    const loadFacilities = async () => {
       try {
-        const { latitude, longitude } = alert;
-        let data = [];
-
-        try {
-          data = await fetchNearbyHospitals(latitude, longitude);
-        } catch {
-          // Direct fallback if backend API route is unreachable
-          const query = `
-            [out:json][timeout:15];
-            (
-              node["amenity"="hospital"](around:10000,${latitude},${longitude});
-              way["amenity"="hospital"](around:10000,${latitude},${longitude});
-              relation["amenity"="hospital"](around:10000,${latitude},${longitude});
-              node["amenity"="clinic"](around:10000,${latitude},${longitude});
-              way["amenity"="clinic"](around:10000,${latitude},${longitude});
-              node["healthcare"="hospital"](around:10000,${latitude},${longitude});
-            );
-            out center 15;
-          `;
-          const res = await fetch(
-            `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`
-          );
-          if (res.ok) {
-            const raw = await res.json();
-            data = (raw.elements || [])
-              .map((item) => {
-                const latVal = item.lat ?? item.center?.lat;
-                const lonVal = item.lon ?? item.center?.lon;
-                if (!latVal || !lonVal) return null;
-                const tags = item.tags || {};
-                const localizedName = Object.entries(tags).find(
-                  ([key, value]) => key.startsWith("name:") && value
-                )?.[1];
-                const dist = getDistanceKm(latitude, longitude, latVal, lonVal);
-                const street = tags["addr:street"] || tags["addr:full"] || "";
-                const city = tags["addr:city"] || tags["addr:suburb"] || "";
-                const address =
-                  [street, city].filter(Boolean).join(", ") || "Address available on map";
-                const phone =
-                  tags.phone || tags["contact:phone"] || tags["emergency:phone"] || null;
-                return {
-                  id: String(item.id || `${latVal}-${lonVal}`),
-                  name: tags.name || tags["name:en"] || localizedName || "",
-                  address,
-                  phone,
-                  distanceKm: dist,
-                  lat: latVal,
-                  lon: lonVal,
-                };
-              })
-              .filter(Boolean)
-              .sort((a, b) => a.distanceKm - b.distanceKm)
-              .slice(0, 5);
-          }
-        }
-
+        const data = await activeLookup.promise;
         if (!isMounted) return;
 
-        const within5km = (data || [])
-          .filter((item) => typeof item.name === "string" && item.name.trim())
-          .map((item) => {
-            const distanceKm =
-              typeof item.distanceKm === "number"
-                ? item.distanceKm
-                : getDistanceKm(latitude, longitude, item.lat, item.lon);
-            return { ...item, distanceKm };
-          })
-          .filter((item) => Number.isFinite(item.distanceKm) && item.distanceKm <= 5)
-          .sort((a, b) => a.distanceKm - b.distanceKm);
-
-        setHospitals(within5km);
-        if (within5km.length === 0) {
-          setError("No hospitals found within 5 km.");
-        }
-      } catch {
+        setFacilities(data);
+      } catch (requestError) {
         if (isMounted) {
-          setError("No hospitals found within 5 km.");
+          if (lookupRef.current === activeLookup) {
+            lookupRef.current = { ...activeLookup, promise: null };
+          }
+          setError(
+            requestError?.response?.data?.message ||
+              "Unable to load nearby facilities right now."
+          );
         }
       } finally {
         if (isMounted) setLoading(false);
       }
     };
 
-    loadHospitals();
+    loadFacilities();
 
     return () => {
       isMounted = false;
     };
-  }, [alert]);
+  }, [alertId, latitude, longitude]);
 
   return (
-    <div className="pa-nearby-hospitals-box">
-      <div className="pa-nearby-hospitals-header">
-        <span className="pa-hospitals-title">🏥 Nearby Emergency Medical Facilities</span>
-        <span className="pa-hospitals-subtitle">(Around SOS coordinates)</span>
+    <>
+      <div className="pa-nearby-hospitals-box">
+        <div className="pa-nearby-hospitals-header">
+          <span className="pa-hospitals-title">🏥 Nearby Emergency Medical Facilities</span>
+          <span className="pa-hospitals-subtitle">Within 5 km</span>
+        </div>
+
+        {loading && <div className="pa-hospitals-status">Searching nearby facilities…</div>}
+        {error && !loading && <div className="pa-hospitals-status pa-hospitals-error">{error}</div>}
+        {!loading && !error && (
+          <FacilityCards
+            facilities={facilities.hospitals}
+            emptyMessage="No hospitals found within 5 km."
+          />
+        )}
       </div>
 
-      {loading && (
-        <div className="pa-hospitals-status">
-          Searching nearest medical facilities around SOS location…
+      <div className="pa-nearby-hospitals-box">
+        <div className="pa-nearby-hospitals-header">
+          <span className="pa-hospitals-title">🛡️ Nearby Police Stations</span>
+          <span className="pa-hospitals-subtitle">Within 5 km</span>
         </div>
-      )}
 
-      {error && !loading && (
-        <div className="pa-hospitals-status pa-hospitals-error">
-          {error}
-        </div>
-      )}
-
-      {!loading && !error && hospitals.length > 0 && (
-        <div className="pa-hospitals-list">
-          {hospitals.map((hosp) => (
-            <div key={hosp.id} className="pa-hospital-card">
-              <div className="pa-hospital-info">
-                <div className="pa-hospital-name">{hosp.name}</div>
-                <div className="pa-hospital-addr">{hosp.address}</div>
-                {hosp.phone && (
-                  <div className="pa-hospital-phone">📞 {hosp.phone}</div>
-                )}
-              </div>
-              <div className="pa-hospital-side">
-                <span className="pa-hospital-dist">
-                  {hosp.distanceKm < 1
-                    ? `${Math.round(hosp.distanceKm * 1000)} m`
-                    : `${hosp.distanceKm.toFixed(1)} km`}
-                </span>
-                <a
-                  href={`https://www.google.com/maps/search/?api=1&query=${hosp.lat},${hosp.lon}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="pa-hospital-map-link"
-                >
-                  View on Map
-                </a>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
+        {loading && <div className="pa-hospitals-status">Searching nearby facilities…</div>}
+        {error && !loading && <div className="pa-hospitals-status pa-hospitals-error">{error}</div>}
+        {!loading && !error && (
+          <FacilityCards
+            facilities={facilities.policeStations}
+            emptyMessage="No police stations found within 5 km."
+          />
+        )}
+      </div>
+    </>
   );
 }
 
@@ -821,7 +813,7 @@ export default function Dashboard({ focus = "active" }) {
                     </div>
 
                     {/* Nearby Emergency Medical Facilities / Hospitals */}
-                    <NearbyHospitalsList alert={alert} />
+                    <NearbyFacilitiesList alert={alert} />
 
                     <div className="pa-actions">
                       <a

@@ -137,12 +137,14 @@ export async function rejectAdminRequest(id) {
   return res.data;
 }
 
-export async function fetchNearbyHospitals(lat, lon) {
-  try {
-    const res = await api.get(`/alerts/nearby-hospitals?lat=${lat}&lon=${lon}`);
-    return res.data?.hospitals || [];
-  } catch (err) {
-    console.warn("[api] backend nearby hospitals endpoint failed, using fallback:", err);
-    throw err;
-  }
+export async function fetchNearbyFacilities(lat, lon) {
+  const res = await api.get("/alerts/nearby-facilities", {
+    params: { lat, lon },
+    timeout: 35000,
+  });
+
+  return {
+    hospitals: res.data?.hospitals || [],
+    policeStations: res.data?.policeStations || [],
+  };
 }

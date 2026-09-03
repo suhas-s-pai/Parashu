@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Navigate } from "react-router-dom";
-import axios from "axios";
 import { useAuth } from "./lib/authContext";
-import { fetchAlertStatus, sendSos } from "./lib/api";
+import { fetchAlertStatus, fetchNearbyFacilities, sendSos } from "./lib/api";
 import { googleMapsUrl, osmEmbedUrl, osmLinkUrl } from "./lib/alerts";
 import { useVoicePrefs } from "./lib/voicePrefs";
 import {
@@ -26,21 +25,6 @@ import {
 
 const TRACKING_INTERVAL_MS = 5000;
 const STATUS_POLL_INTERVAL_MS = 3000;
-const NEARBY_RADIUS_METERS = 5000;
-
-function getDistanceKm(lat1, lon1, lat2, lon2) {
-  const earthRadiusKm = 6371;
-  const toRadians = (value) => value * (Math.PI / 180);
-  const dLat = toRadians(lat2 - lat1);
-  const dLon = toRadians(lon2 - lon1);
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRadians(lat1)) *
-      Math.cos(toRadians(lat2)) *
-      Math.sin(dLon / 2) ** 2;
-
-  return earthRadiusKm * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
 
 // The full set of phrases the Voice Protection card advertises as "listening
 // for". Kept as one list so the UI can never claim a phrase works that the
@@ -479,74 +463,18 @@ export default function Home() {
     setNearbyLoading(true);
 
     try {
-      const coords = await getCurrentPosition();
+      const coords = position
+        ? { latitude: position.lat, longitude: position.lon }
+        : await getCurrentPosition();
       setNearbyCenter([coords.latitude, coords.longitude]);
 
-      const selectors = type === "police"
-        ? ['["amenity"="police"]']
-        : [
-            '["amenity"="hospital"]',
-            '["amenity"="clinic"]',
-            '["healthcare"="hospital"]',
-            '["healthcare"="clinic"]',
-          ];
-      const overpassEntries = selectors
-        .flatMap((selector) => ["node", "way", "relation"].map(
-          (elementType) =>
-            `${elementType}${selector}(around:${NEARBY_RADIUS_METERS},${coords.latitude},${coords.longitude});`
-        ))
-        .join("\n");
-
-      const query = `
-        [out:json][timeout:25];
-        (
-          ${overpassEntries}
-        );
-        out center;
-      `;
-
-      const response = await axios.get("https://overpass-api.de/api/interpreter", {
-        params: { data: query },
-      });
-
-      const normalized = (response.data.elements || [])
-        .map((item) => {
-          const tags = item.tags || {};
-          const latValue = item.lat ?? item.center?.lat;
-          const lonValue = item.lon ?? item.center?.lon;
-          const localizedName = Object.entries(tags).find(
-            ([key, value]) => key.startsWith("name:") && value
-          )?.[1];
-          const name = tags.name || tags["name:en"] || localizedName;
-
-          if (!Number.isFinite(latValue) || !Number.isFinite(lonValue) || !name) {
-            return null;
-          }
-
-          const addressParts = [
-            tags["addr:street"],
-            tags["addr:city"],
-            tags["addr:postcode"],
-          ].filter(Boolean);
-
-          return {
-            id: `${item.type}-${item.id}`,
-            name,
-            address: addressParts.join(", "),
-            lat: latValue,
-            lon: lonValue,
-            distanceKm: getDistanceKm(
-              coords.latitude,
-              coords.longitude,
-              latValue,
-              lonValue
-            ),
-          };
-        })
-        .filter(Boolean)
-        .filter((place) => place.distanceKm <= NEARBY_RADIUS_METERS / 1000)
-        .sort((a, b) => a.distanceKm - b.distanceKm)
-        .slice(0, 12);
+      const facilities = await fetchNearbyFacilities(
+        coords.latitude,
+        coords.longitude
+      );
+      const normalized = type === "police"
+        ? facilities.policeStations
+        : facilities.hospitals;
 
       setNearbyPlaces(normalized);
       if (!normalized.length) {
@@ -558,7 +486,8 @@ export default function Home() {
       }
     } catch (error) {
       setNearbyError(
-        error?.message || "Unable to load nearby services right now."
+        error?.response?.data?.message ||
+          "Unable to load nearby facilities right now."
       );
     } finally {
       setNearbyLoading(false);
@@ -875,7 +804,7 @@ export default function Home() {
                 <p>
                   {nearbyError.startsWith("No ")
                     ? "OpenStreetMap has no named matching facility inside the configured radius."
-                    : "Try again after allowing location permission."}
+                    : "Please try the nearby search again in a moment."}
                 </p>
               </div>
             </div>
