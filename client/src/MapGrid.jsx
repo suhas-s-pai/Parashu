@@ -87,7 +87,7 @@ export default function MapGrid() {
       syncLive
     >
 
-      <div className="ks-split" style={{ gridTemplateColumns: "7fr 3fr" }}>
+      <div className="ks-split ks-map-grid">
 
         <div className="ks-card">
 

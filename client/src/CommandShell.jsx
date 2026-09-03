@@ -81,7 +81,7 @@ export default function CommandShell({
 
         <a className="ks-logo" href="/">
           <span className="ks-logo__mark">
-            <ShieldAlert size={16} strokeWidth={2.1} />
+            <img src="/symbol.png" alt="" />
           </span>
           <span className="ks-logo__text">Para<span>shu</span></span>
         </a>

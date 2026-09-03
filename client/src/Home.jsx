@@ -26,6 +26,21 @@ import {
 
 const TRACKING_INTERVAL_MS = 5000;
 const STATUS_POLL_INTERVAL_MS = 3000;
+const NEARBY_RADIUS_METERS = 5000;
+
+function getDistanceKm(lat1, lon1, lat2, lon2) {
+  const earthRadiusKm = 6371;
+  const toRadians = (value) => value * (Math.PI / 180);
+  const dLat = toRadians(lat2 - lat1);
+  const dLon = toRadians(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRadians(lat1)) *
+      Math.cos(toRadians(lat2)) *
+      Math.sin(dLon / 2) ** 2;
+
+  return earthRadiusKm * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
 
 // The full set of phrases the Voice Protection card advertises as "listening
 // for". Kept as one list so the UI can never claim a phrase works that the
@@ -467,15 +482,25 @@ export default function Home() {
       const coords = await getCurrentPosition();
       setNearbyCenter([coords.latitude, coords.longitude]);
 
-      const amenity = type === "police" ? "police" : "hospital";
-      const fallbackName = type === "police" ? "Police Station" : "Hospital";
+      const selectors = type === "police"
+        ? ['["amenity"="police"]']
+        : [
+            '["amenity"="hospital"]',
+            '["amenity"="clinic"]',
+            '["healthcare"="hospital"]',
+            '["healthcare"="clinic"]',
+          ];
+      const overpassEntries = selectors
+        .flatMap((selector) => ["node", "way", "relation"].map(
+          (elementType) =>
+            `${elementType}${selector}(around:${NEARBY_RADIUS_METERS},${coords.latitude},${coords.longitude});`
+        ))
+        .join("\n");
 
       const query = `
         [out:json][timeout:25];
         (
-          node["amenity"="${amenity}"](around:4000,${coords.latitude},${coords.longitude});
-          way["amenity"="${amenity}"](around:4000,${coords.latitude},${coords.longitude});
-          relation["amenity"="${amenity}"](around:4000,${coords.latitude},${coords.longitude});
+          ${overpassEntries}
         );
         out center;
       `;
@@ -489,8 +514,12 @@ export default function Home() {
           const tags = item.tags || {};
           const latValue = item.lat ?? item.center?.lat;
           const lonValue = item.lon ?? item.center?.lon;
+          const localizedName = Object.entries(tags).find(
+            ([key, value]) => key.startsWith("name:") && value
+          )?.[1];
+          const name = tags.name || tags["name:en"] || localizedName;
 
-          if (!latValue || !lonValue) {
+          if (!Number.isFinite(latValue) || !Number.isFinite(lonValue) || !name) {
             return null;
           }
 
@@ -502,18 +531,30 @@ export default function Home() {
 
           return {
             id: `${item.type}-${item.id}`,
-            name: tags.name || fallbackName,
+            name,
             address: addressParts.join(", "),
             lat: latValue,
             lon: lonValue,
+            distanceKm: getDistanceKm(
+              coords.latitude,
+              coords.longitude,
+              latValue,
+              lonValue
+            ),
           };
         })
         .filter(Boolean)
+        .filter((place) => place.distanceKm <= NEARBY_RADIUS_METERS / 1000)
+        .sort((a, b) => a.distanceKm - b.distanceKm)
         .slice(0, 12);
 
       setNearbyPlaces(normalized);
       if (!normalized.length) {
-        setNearbyError("No nearby services were found within 4 km.");
+        setNearbyError(
+          type === "police"
+            ? "No police stations found within 5 km."
+            : "No hospitals found within 5 km."
+        );
       }
     } catch (error) {
       setNearbyError(
@@ -558,7 +599,7 @@ export default function Home() {
 
       <header className="ks-home__nav">
         <a className="ks-logo" href="/" style={{ marginBottom: 0, height: "auto" }}>
-          <span className="ks-logo__mark"><ShieldAlert size={16} strokeWidth={2.1} /></span>
+          <span className="ks-logo__mark"><img src="/symbol.png" alt="" /></span>
           <span className="ks-logo__text">Para<span>shu</span></span>
         </a>
 
@@ -831,7 +872,11 @@ export default function Home() {
             <div className="ks-card__body">
               <div className="ks-empty ks-empty--compact">
                 <h3>{nearbyError}</h3>
-                <p>Try again after allowing location permission.</p>
+                <p>
+                  {nearbyError.startsWith("No ")
+                    ? "OpenStreetMap has no named matching facility inside the configured radius."
+                    : "Try again after allowing location permission."}
+                </p>
               </div>
             </div>
           </div>
@@ -839,6 +884,19 @@ export default function Home() {
 
         {!nearbyLoading && nearbyPlaces.length > 0 ? (
           <div className="ks-card">
+            <div className="ks-card__head">
+              {nearbyType === "police" ? (
+                <ShieldAlert size={15} strokeWidth={1.8} />
+              ) : (
+                <Hospital size={15} strokeWidth={1.8} />
+              )}
+              <h2>
+                {nearbyType === "police"
+                  ? "Nearby Police Stations"
+                  : "Nearby Emergency Medical Facilities"}
+              </h2>
+              <span className="ks-chip ks-chip--ghost">Within 5 km</span>
+            </div>
             <div className="ks-card__body">
               {nearbyCenter ? (
                 <div className="ks-nearby-map">

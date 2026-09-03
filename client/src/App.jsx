@@ -1,5 +1,4 @@
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
-import { ShieldAlert } from "lucide-react";
 import Login from "./Login";
 import Dashboard from "./Dashboard";
 import Home from "./Home";
@@ -14,7 +13,7 @@ function Boot({ title, detail }) {
   return (
     <div className="ks-boot">
       <span className="ks-boot__mark">
-        <ShieldAlert size={20} strokeWidth={2.1} />
+        <img src="/symbol.png" alt="Parashu" />
       </span>
       <strong>{title}</strong>
       {detail && <p>{detail}</p>}

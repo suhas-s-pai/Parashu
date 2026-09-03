@@ -127,6 +127,9 @@ function NearbyHospitalsList({ alert }) {
                 const lonVal = item.lon ?? item.center?.lon;
                 if (!latVal || !lonVal) return null;
                 const tags = item.tags || {};
+                const localizedName = Object.entries(tags).find(
+                  ([key, value]) => key.startsWith("name:") && value
+                )?.[1];
                 const dist = getDistanceKm(latitude, longitude, latVal, lonVal);
                 const street = tags["addr:street"] || tags["addr:full"] || "";
                 const city = tags["addr:city"] || tags["addr:suburb"] || "";
@@ -136,7 +139,7 @@ function NearbyHospitalsList({ alert }) {
                   tags.phone || tags["contact:phone"] || tags["emergency:phone"] || null;
                 return {
                   id: String(item.id || `${latVal}-${lonVal}`),
-                  name: tags.name || tags["name:en"] || "Emergency Hospital",
+                  name: tags.name || tags["name:en"] || localizedName || "",
                   address,
                   phone,
                   distanceKm: dist,
@@ -153,6 +156,7 @@ function NearbyHospitalsList({ alert }) {
         if (!isMounted) return;
 
         const within5km = (data || [])
+          .filter((item) => typeof item.name === "string" && item.name.trim())
           .map((item) => {
             const distanceKm =
               typeof item.distanceKm === "number"

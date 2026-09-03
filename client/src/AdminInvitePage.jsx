@@ -105,7 +105,9 @@ export default function AdminInvitePage() {
     <div className="ks-home" style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
       <header className="ks-home__head">
         <div className="ks-home__brand">
-          <ShieldAlert size={22} className="ks-home__logo" />
+          <span className="ks-logo__mark">
+            <img src="/symbol.png" alt="" />
+          </span>
           <span className="ks-home__title">Parashu</span>
         </div>
         <Link to="/" className="ks-btn ks-btn--ghost" style={{ fontSize: 13, gap: 6 }}>
