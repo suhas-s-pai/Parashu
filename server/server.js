@@ -27,7 +27,7 @@ const MAX_NAME_LENGTH = 120;
 const MAX_PHONE_LENGTH = 32;
 const MAX_EMAIL_LENGTH = 254;
 const MAX_TRIGGER_LENGTH = 48;
-const NEARBY_RADIUS_METERS = 5000;
+const NEARBY_RADIUS_METERS = 10000;
 const OVERPASS_ENDPOINTS = [
   "https://overpass-api.de/api/interpreter",
   "https://overpass.kumi.systems/api/interpreter",
@@ -125,7 +125,8 @@ function normalizeFacility(item, latitude, longitude) {
   const localizedName = Object.entries(tags).find(
     ([key, value]) => key.startsWith("name:") && value
   )?.[1];
-  const name = tags.name || tags["name:en"] || localizedName;
+  const name = tags.name || tags["name:en"] || localizedName ||
+    (tags.amenity === "police" ? "Police station" : null);
 
   if (!name || !Number.isFinite(lat) || !Number.isFinite(lon)) return null;
 
@@ -158,10 +159,11 @@ async function requestNearbyFacilities(latitude, longitude) {
   const query = `
     [out:json][timeout:20];
     (
-      nwr["amenity"~"^(hospital|clinic|police)$"]["name"](around:${NEARBY_RADIUS_METERS},${latitude},${longitude});
+      nwr["amenity"="police"](around:${NEARBY_RADIUS_METERS},${latitude},${longitude});
+      nwr["amenity"~"^(hospital|clinic)$"]["name"](around:${NEARBY_RADIUS_METERS},${latitude},${longitude});
       nwr["healthcare"~"^(hospital|clinic)$"]["name"](around:${NEARBY_RADIUS_METERS},${latitude},${longitude});
     );
-    out center 80;
+    out center;
   `;
   let lastError;
 
@@ -394,8 +396,8 @@ app.get("/alerts/nearby-facilities", requireUser, async (req, res) => {
 
     return res.json({
       radiusKm: NEARBY_RADIUS_METERS / 1000,
-      hospitals: facilities.filter((facility) => facility.type === "hospital").slice(0, 12),
-      policeStations: facilities.filter((facility) => facility.type === "police").slice(0, 12),
+      hospitals: facilities.filter((facility) => facility.type === "hospital"),
+      policeStations: facilities.filter((facility) => facility.type === "police"),
     });
   } catch (error) {
     console.error("[nearby-facilities] OpenStreetMap lookup failed", error);

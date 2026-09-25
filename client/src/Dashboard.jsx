@@ -119,8 +119,8 @@ function FacilityCards({ facilities, emptyMessage }) {
   );
 }
 
-// One request supplies both lists and is tied to coordinate primitives so the
-// five-second alert refresh does not restart a lookup that is still in flight.
+// One request supplies both lists. Refresh when the live alert position has
+// moved enough to materially change the 10 km search area.
 function NearbyFacilitiesList({ alert }) {
   const latitude = alert?.latitude;
   const longitude = alert?.longitude;
@@ -152,7 +152,7 @@ function NearbyFacilitiesList({ alert }) {
     if (
       !previousLookup ||
       previousLookup.alertId !== alertId ||
-      movedKm >= 1 ||
+      movedKm >= 0.25 ||
       !previousLookup.promise
     ) {
       lookupRef.current = {
@@ -200,7 +200,7 @@ function NearbyFacilitiesList({ alert }) {
       <div className="pa-nearby-hospitals-box">
         <div className="pa-nearby-hospitals-header">
           <span className="pa-hospitals-title">🏥 Nearby Emergency Medical Facilities</span>
-          <span className="pa-hospitals-subtitle">Within 5 km</span>
+          <span className="pa-hospitals-subtitle">Within 10 km</span>
         </div>
 
         {loading && <div className="pa-hospitals-status">Searching nearby facilities…</div>}
@@ -208,7 +208,7 @@ function NearbyFacilitiesList({ alert }) {
         {!loading && !error && (
           <FacilityCards
             facilities={facilities.hospitals}
-            emptyMessage="No hospitals found within 5 km."
+            emptyMessage="No hospitals found within 10 km."
           />
         )}
       </div>
@@ -216,7 +216,7 @@ function NearbyFacilitiesList({ alert }) {
       <div className="pa-nearby-hospitals-box">
         <div className="pa-nearby-hospitals-header">
           <span className="pa-hospitals-title">🛡️ Nearby Police Stations</span>
-          <span className="pa-hospitals-subtitle">Within 5 km</span>
+          <span className="pa-hospitals-subtitle">Within 10 km</span>
         </div>
 
         {loading && <div className="pa-hospitals-status">Searching nearby facilities…</div>}
@@ -224,7 +224,7 @@ function NearbyFacilitiesList({ alert }) {
         {!loading && !error && (
           <FacilityCards
             facilities={facilities.policeStations}
-            emptyMessage="No police stations found within 5 km."
+            emptyMessage="No police stations found within 10 km."
           />
         )}
       </div>

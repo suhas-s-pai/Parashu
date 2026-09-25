@@ -71,7 +71,7 @@ function VoiceWaveform() {
   );
 }
 
-function VoiceSettingsModal({ prefs, setSensitivity, setAutoEnable, micPermission, voiceSupported, onClose }) {
+function VoiceSettingsModal({ prefs, setSensitivity, micPermission, voiceSupported, onClose }) {
   useEffect(() => {
     const onKeyDown = (event) => {
       if (event.key === "Escape") onClose();
@@ -151,18 +151,6 @@ function VoiceSettingsModal({ prefs, setSensitivity, setAutoEnable, micPermissio
             <span className={`ks-chip ${permissionChip.cls}`}>{permissionChip.text}</span>
           </div>
 
-          <div className="ks-modal__row">
-            <div>
-              <strong>Auto enable on open</strong>
-              <p>Start listening automatically when Parashu loads</p>
-            </div>
-            <button
-              type="button"
-              className={`ks-toggle${prefs.autoEnable ? " is-on" : ""}`}
-              onClick={() => setAutoEnable(!prefs.autoEnable)}
-              aria-label="Auto enable voice protection"
-            />
-          </div>
         </div>
 
         <div className="ks-modal__foot">
@@ -178,7 +166,7 @@ function VoiceSettingsModal({ prefs, setSensitivity, setAutoEnable, micPermissio
 
 export default function Home() {
   const { user, savePhone, signOut } = useAuth();
-  const { prefs: voicePrefs, setSensitivity, setAutoEnable } = useVoicePrefs();
+  const { prefs: voicePrefs, setSensitivity } = useVoicePrefs();
 
   const [phase, setPhase] = useState("idle");
   const [notice, setNotice] = useState("");
@@ -202,7 +190,7 @@ export default function Home() {
   const statusPollRef = useRef(null);
   const sosActiveRef = useRef(false);
   const activeAlertIdRef = useRef(null);
-  const autoEnableAttemptedRef = useRef(false);
+  const autoStartAttemptedRef = useRef(false);
   // Speech callbacks are bound once when recognition starts, so they call
   // through a ref to always reach the current handler.
   const triggerRef = useRef(() => {});
@@ -361,6 +349,12 @@ export default function Home() {
       }
     };
 
+    recognition.onstart = () => {
+      setListening(true);
+      setMicPermission("granted");
+      setNotice("");
+    };
+
     // Continuous recognition still ends on its own after a pause. Restart only
     // while protection is meant to be on, otherwise stopping never sticks.
     recognition.onend = () => {
@@ -378,10 +372,15 @@ export default function Home() {
 
     recognitionRef.current = recognition;
     shouldListenRef.current = true;
-    setListening(true);
-    setNotice("");
-    recognition.start();
-    setMicPermission("granted");
+    try {
+      recognition.start();
+    } catch {
+      shouldListenRef.current = false;
+      recognitionRef.current = null;
+      setListening(false);
+      setNotice("Voice recognition could not start. Check microphone access and try again.");
+      return;
+    }
   }, []);
 
   const stopListening = useCallback(() => {
@@ -418,19 +417,18 @@ export default function Home() {
     };
   }, []);
 
-  // Starts listening once, only if the operator opted in from the settings
-  // modal — never overrides an explicit tap on the card itself.
+  // Voice protection starts automatically when the home screen opens. The
+  // browser may still require a one-time microphone permission grant.
   useEffect(() => {
     if (
-      voicePrefs.autoEnable &&
       voiceSupported &&
       micPermission !== "denied" &&
-      !autoEnableAttemptedRef.current
+      !autoStartAttemptedRef.current
     ) {
-      autoEnableAttemptedRef.current = true;
+      autoStartAttemptedRef.current = true;
       startListening();
     }
-  }, [voicePrefs.autoEnable, voiceSupported, micPermission, startListening]);
+  }, [voiceSupported, micPermission, startListening]);
 
   useEffect(() => {
     return () => {
@@ -463,9 +461,15 @@ export default function Home() {
     setNearbyLoading(true);
 
     try {
-      const coords = position
-        ? { latitude: position.lat, longitude: position.lon }
-        : await getCurrentPosition();
+      // Read a fresh high accuracy fix for this lookup; the displayed live
+      // position may be older than the user's current location.
+      const coords = await getCurrentPosition();
+      setPosition({
+        lat: coords.latitude,
+        lon: coords.longitude,
+        accuracy: coords.accuracy,
+        updatedAt: Date.now(),
+      });
       setNearbyCenter([coords.latitude, coords.longitude]);
 
       const facilities = await fetchNearbyFacilities(
@@ -480,8 +484,8 @@ export default function Home() {
       if (!normalized.length) {
         setNearbyError(
           type === "police"
-            ? "No police stations found within 5 km."
-            : "No hospitals found within 5 km."
+            ? "No police stations found within 10 km."
+            : "No hospitals found within 10 km."
         );
       }
     } catch (error) {
@@ -803,7 +807,7 @@ export default function Home() {
                 <h3>{nearbyError}</h3>
                 <p>
                   {nearbyError.startsWith("No ")
-                    ? "OpenStreetMap has no named matching facility inside the configured radius."
+                    ? "OpenStreetMap has no matching facility inside the 10 km radius."
                     : "Please try the nearby search again in a moment."}
                 </p>
               </div>
@@ -821,10 +825,10 @@ export default function Home() {
               )}
               <h2>
                 {nearbyType === "police"
-                  ? "Nearby Police Stations"
+                  ? "Nearby Police Stations within 10 km"
                   : "Nearby Emergency Medical Facilities"}
               </h2>
-              <span className="ks-chip ks-chip--ghost">Within 5 km</span>
+              <span className="ks-chip ks-chip--ghost">Within 10 km</span>
             </div>
             <div className="ks-card__body">
               {nearbyCenter ? (
@@ -869,7 +873,6 @@ export default function Home() {
         <VoiceSettingsModal
           prefs={voicePrefs}
           setSensitivity={setSensitivity}
-          setAutoEnable={setAutoEnable}
           micPermission={micPermission}
           voiceSupported={voiceSupported}
           onClose={() => setShowVoiceSettings(false)}
